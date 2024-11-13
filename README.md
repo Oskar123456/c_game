@@ -1,5 +1,12 @@
 # game programming in C
 
+## TODO:
+
+  - 2(.5)D Map Texture Gen
+  - 3rd person camera
+  - controllable unit
+  - ??
+
 ## Libs
 
   - **stb**
