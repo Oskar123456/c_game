@@ -2,9 +2,8 @@
 Create Date:        2024-11-12
 Author:             Oskar Bahner Hansen
 Email:              cph-oh82@cphbusiness.dk
-Description:        noats is a notes-taking and
-                    synchronization application.
-License:            MIT
+Description:        exercise in games programming
+License:            none
 *****************************************************/
 
 #include "../include/incl.h"
@@ -12,17 +11,9 @@ License:            MIT
 #include "../include/c_log.h"
 #include "../include/raylib/raylib.h"
 
-/* -----------------------
- * RESTfulness in C.......
- * ***********************
- * Oskar Bahner Hansen....
- * cph-oh82@cphbusiness.dk
- * 2024-10-31.............
- * ----------------------- */
-
 void pollKeys()
 {
-    if (IsKeyDown(KEY_Q))
+    if (IsKeyPressed(KEY_Q))
         SetExitKey(KEY_Q);
 }
 
