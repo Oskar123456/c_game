@@ -8,6 +8,7 @@ TARGET      := app
 
 #The Directories, Source, Includes, Objects, Binary and Resources
 SRCDIR      := src
+LIBDIR      := lib
 INCDIR      := include
 BUILDDIR    := obj
 TARGETDIR   := bin
@@ -19,7 +20,7 @@ OBJEXT      := o
 #Flags, Libraries and Includes
 CFLAGS      := -fopenmp -Wall -g
 LIB         := -lm -lpq -lcurl
-INC         := -I$(INCDIR)
+INC         := -I$(INCDIR) -I$(LIBDIR)
 INCDEP      := -I$(INCDIR)
 # Mongoose build options. See https://mongoose.ws/documentation/#build-options
 CFLAGS_MONGOOSE += -DMG_ENABLE_LINES=1
@@ -65,7 +66,7 @@ cleaner: clean
 
 #Link
 $(TARGET): $(OBJECTS)
-	$(CC) -o $(TARGETDIR)/$(TARGET) $^ $(LIB)
+	$(CC) -o $(TARGETDIR)/$(TARGET) $^ $(LIB) lib/libraylib.a
 
 #Compile
 $(BUILDDIR)/%.$(OBJEXT): $(SRCDIR)/%.$(SRCEXT)
