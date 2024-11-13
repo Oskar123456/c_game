@@ -6,5 +6,5 @@ int noiseInc(int num);
 double noiseGrad(int hash, double x, double y, double z);
 double noiseModulo(double num);
 double noisePerlin(double x, double y, double z);
-double OctavePerlin(double x, double y, double z, int octaves, double persistence);
-void noiseSetRepeat(int repeatInterval);
+double noiseOctavePerlin(double x, double y, double z, int octaves, double persistence);
+void noiseInit(int repeatInterval);

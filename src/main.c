@@ -14,6 +14,7 @@ License:            none
 #include "../include/raylib/raymath.h"
 #include "../include/raylib/rcamera.h"
 #include "../include/stb/stb_perlin.h"
+#include "../include/noise.h"
 
 #include "../include/stb/stb_image.h"
 #include "../include/stb/stb_image_write.h"
@@ -62,31 +63,7 @@ void pollKeys()
         CAMERA_MOVE_SPEED = 145.0f;
     else
         CAMERA_MOVE_SPEED = 45.0f;
-
-    //float camera_speed = 1;
-    //if (IsKeyDown(KEY_A)) {
-    //    CameraMoveRight(&camera, -camera_speed, false);
-    //}
-    //if (IsKeyDown(KEY_D)) {
-    //    CameraMoveRight(&camera, camera_speed, false);
-    //}
-    //if (IsKeyDown(KEY_W)) {
-    //    CameraMoveForward(&camera, camera_speed, false);
-    //}
-    //if (IsKeyDown(KEY_S)) {
-    //    CameraMoveForward(&camera, -camera_speed, false);
-    //}
 }
-
-/*
-typedef struct Image {
-    void *data;             // Image raw data
-    int width;              // Image base width
-    int height;             // Image base height
-    int mipmaps;            // Mipmap levels, 1 by default
-    int format;             // Data format (PixelFormat type)
-} Image;
- */
 
 struct Pixel { u8 r, g, b, a; };
 
@@ -102,30 +79,54 @@ int main(int argc, char *argv[])
     sds s = sdscatprintf(sdsempty(), "is in working? %s", "yes");
     c_log_success(LOG_TAG, s);
 
-    // Initialization
-    //--------------------------------------------------------------------------------------
-
     InitWindow(screenWidth, screenHeight, "raylib [models] example - heightmap loading and drawing");
     SetWindowState(FLAG_WINDOW_RESIZABLE);
     DisableCursor();
     SetExitKey(0);
 
-    int size_img = 2256;
+    int repeat_interval = 256, seed = 5;
+    noiseInit(2222);
+    int size_img = 2112, scale = 2 << 10;
     u8 img[size_img][size_img];
+    u8 hmin = 255, hmax = 0;
+    //float dmin = F32_MAX, dmax = F32_MIN;
     for (int i = 0; i < size_img; ++i) {
         for (int j = 0; j < size_img; ++j) {
-            float ns = 1 * stb_perlin_noise3_seed((float)j / 106.0f, (float)i / 106.0f, 10, 256, 256, 256, 256);
-            ns += 0.25 * stb_perlin_noise3_seed((float)j / 16.0f, (float)i / 16.0f, 10, 256, 256, 256, 256);
-            ns = pow(ns, 0.35);
-
-            u8 fin = fabs(ns * 256.0f);
+            double ix = (float)i / scale;
+            double jy = (float)j / scale;
+            double ns = stb_perlin_noise3_seed(ix, jy, 0.5,
+                    repeat_interval, repeat_interval, repeat_interval, seed);
+            ns += 2 * stb_perlin_noise3_seed(ix * 2, jy * 2, 0.5,
+                    repeat_interval, repeat_interval, repeat_interval, seed);
+            ns += 4 * stb_perlin_noise3_seed(ix * 4, jy * 4, 0.5,
+                    repeat_interval, repeat_interval, repeat_interval, seed);
+            ns += 8 * stb_perlin_noise3_seed(ix * 8, jy * 8, 0.5,
+                    repeat_interval, repeat_interval, repeat_interval, seed);
+            ns += 16 * stb_perlin_noise3_seed(ix * 16, jy * 16, 0.5,
+                    repeat_interval, repeat_interval, repeat_interval, seed);
+            ns /= 18;
+            //double ns = noiseOctavePerlin((float)i / scale, (float)j / scale, 0.5,
+            //        2, 99);
+            int sign = (ns < 0);
+            ns = pow(fabs(ns), 1.4);
+            if (sign)
+                ns *= -1;
+            //ns = pow(ns, 0.75);
+            //printf("%f\n", ns);
+            u8 fin = fabs(ns * 255.0f);
+            if (fin < 240) {
+                while (fin++ % 20 != 0);
+            }
+            if (fin > hmax) hmax = fin;
+            if (fin < hmin) hmin = fin;
             img[i][j] = fin;
         }
     }
 
+    printf("%d %d\n", hmin, hmax);
+
     struct Image image = { .data = img, size_img, size_img, 1, PIXELFORMAT_UNCOMPRESSED_GRAYSCALE};
     //ExportImage(img_struct, "raylib_export.png");
-
     //Image image = LoadImage("raylib_export.png");     // Load heightmap image (RAM)
     Texture2D texture = LoadTextureFromImage(image);        // Convert image to texture (VRAM)
 
@@ -136,7 +137,7 @@ int main(int argc, char *argv[])
     camera.fovy = 45.0f;                                    // Camera field-of-view Y
     camera.projection = CAMERA_PERSPECTIVE;                 // Camera projection type
 
-    Mesh mesh = GenMeshHeightmap(image, (Vector3){ 4280, 16, 4280 }); // Generate heightmap mesh (RAM and VRAM)
+    Mesh mesh = GenMeshHeightmap(image, (Vector3){ 2228, 128, 2228 }); // Generate heightmap mesh (RAM and VRAM)
     Model model = LoadModelFromMesh(mesh);                  // Load model from generated mesh
 
     model.materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture; // Set map diffuse texture
@@ -170,7 +171,7 @@ int main(int argc, char *argv[])
 
             BeginMode3D(camera);
 
-                DrawModel(model, mapPosition, 1.0f, GRAY);
+                DrawModel(model, mapPosition, 1.0f, (Color) { 0xC2, 0xB2, 0x80, 0xFF });
 
                 DrawGrid(20, 1.0f);
 
