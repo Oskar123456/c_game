@@ -1,0 +1,198 @@
+html {
+    display: flex;   
+    flex-direction: column;
+    align-items: center;
+}
+
+body {
+    display: flex;   
+    flex-direction: column;
+    justify-content: center;
+    align-items: center;
+    row-gap: 20px;
+    width: 800px;
+    background-color: #262626;
+}
+
+nav {
+    display: flex;   
+    flex-direction: row;
+    justify-content: space-between;
+    width: 800px;
+    border: 1px solid #aeaeae;
+    background-color: #464646;
+    padding: 10px;
+    margin-top: 10px;
+}
+
+nav a {
+    display: flex;   
+    align-items: center;
+    justify-content: center;
+    text-decoration: none;
+    color: #bababa;
+}
+
+nav a:visited {
+    color: #bababa;
+}
+
+nav ul {
+    list-style: none;
+    display: flex;   
+    flex-direction: row;
+    justify-content: flex-end;
+    align-items: center;
+    column-gap: 30px;
+    padding: 10px;
+}
+
+nav ul li {
+}
+
+nav ul li form {
+    display: flex;   
+    flex-direction: row;
+    justify-content: flex-start;
+    align-items: flex-end;
+    padding: 10px;
+    column-gap: 4px;
+}
+
+nav input[type="text"], textarea, button {
+
+  background-color : #d1d1d1; 
+  border-radius: 4px;
+
+}
+ 
+#main {
+    width: 800px;
+    display: flex;   
+    flex-direction: row;
+    justify-content: space-between;
+    border: 1px solid #aeaeae;
+    padding: 10px;
+}
+
+#main_content {
+    display: flex;   
+    flex-direction: column;
+    width: 800px;
+    min-height: 800px;
+    border: 1px solid #aeaeae;
+    padding: 10px;
+    background-color: #464646;
+    color: #bababa;
+}
+
+#main_content ul {
+    list-style: none;
+    display: flex;   
+    flex-direction: column;
+    column-gap: 30px;
+    row-gap: 30px;
+    padding: 10px;
+}
+
+#main_content ul li {
+    display: flex;   
+    column-gap: 10px;
+    justify-content: space-between;
+    padding: 4px;
+    border: 1px solid #aeaeae;
+}
+
+#main_content ul li a, a:visited {
+    color: #bababa;
+    text-decoration: none;
+}
+
+#main_content table {
+    padding: 10px;
+    color: white;
+}
+
+#main_content th {
+    font-size: 2rem;
+    color: yellow;
+}
+
+#display_list {
+}
+
+img {
+    width: 260px;
+}
+
+button {
+    decoration: none;
+    width: fit-content;
+}
+
+.button_div {
+    display: flex;   
+    justify-content: center;
+}
+
+#display_top {
+    display: flex;   
+    width: 560px;
+    flex-direction: row;
+    justify-content: space-between;
+}
+
+#display_title_div {
+    display: flex;   
+    flex-direction: column;
+    row-gap: 12px;
+}
+
+#display_title {
+    
+}
+
+#display_title_cred {
+    font-size: 0.8rem;
+}
+
+#display_title_img {
+    
+}
+
+#display_bot {
+    
+}
+
+#poem_stats {
+    width: 200px;
+    min-height: 800px;
+    border: 1px solid #aeaeae;
+}
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
+
