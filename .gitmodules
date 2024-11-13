@@ -1,6 +1,0 @@
-[submodule "external/raygui"]
-	path = external/raygui
-	url = https://github.com/raysan5/raygui
-[submodule "external/stb"]
-	path = external/stb
-	url = https://github.com/nothings/stb
