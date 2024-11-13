@@ -86,7 +86,7 @@ int main(int argc, char *argv[])
 
     int repeat_interval = 256, seed = 5;
     noiseInit(2222);
-    int size_img = 2112, scale = 2 << 10;
+    int size_img = 2112, scale = 2 << 11;
     u8 img[size_img][size_img];
     u8 hmin = 255, hmax = 0;
     //float dmin = F32_MAX, dmax = F32_MIN;
@@ -104,18 +104,20 @@ int main(int argc, char *argv[])
                     repeat_interval, repeat_interval, repeat_interval, seed);
             ns += 16 * stb_perlin_noise3_seed(ix * 16, jy * 16, 0.5,
                     repeat_interval, repeat_interval, repeat_interval, seed);
-            ns /= 18;
+            ns += 32 * stb_perlin_noise3_seed(ix * 32, jy * 32, 0.5,
+                    repeat_interval, repeat_interval, repeat_interval, seed);
+            ns /= 38;
             //double ns = noiseOctavePerlin((float)i / scale, (float)j / scale, 0.5,
             //        2, 99);
             int sign = (ns < 0);
-            ns = pow(fabs(ns), 1.4);
+            ns = pow(fabs(ns), 0.5);
             if (sign)
                 ns *= -1;
             //ns = pow(ns, 0.75);
             //printf("%f\n", ns);
             u8 fin = fabs(ns * 255.0f);
             if (fin < 240) {
-                while (fin++ % 20 != 0);
+                while (fin++ % 1 != 0);
             }
             if (fin > hmax) hmax = fin;
             if (fin < hmin) hmin = fin;
