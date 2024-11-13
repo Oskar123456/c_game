@@ -13,11 +13,6 @@ License:            none
 #include "../include/raylib/raylib.h"
 #include "../include/raylib/raymath.h"
 #include "../include/raylib/rcamera.h"
-#include "../include/stb/stb_perlin.h"
-#include "../include/noise.h"
-
-#include "../include/stb/stb_image.h"
-#include "../include/stb/stb_image_write.h"
 
 static float CAMERA_MOVE_SPEED = 45.0f; // Units per second
 #define CAMERA_ROTATION_SPEED                           0.03f
@@ -84,52 +79,7 @@ int main(int argc, char *argv[])
     DisableCursor();
     SetExitKey(0);
 
-    int repeat_interval = 256, seed = 5;
-    noiseInit(2222);
-    int size_img = 2112, scale = 2 << 11;
-    u8 img[size_img][size_img];
-    u8 hmin = 255, hmax = 0;
-    //float dmin = F32_MAX, dmax = F32_MIN;
-    for (int i = 0; i < size_img; ++i) {
-        for (int j = 0; j < size_img; ++j) {
-            double ix = (float)i / scale;
-            double jy = (float)j / scale;
-            double ns = stb_perlin_noise3_seed(ix, jy, 0.5,
-                    repeat_interval, repeat_interval, repeat_interval, seed);
-            ns += 2 * stb_perlin_noise3_seed(ix * 2, jy * 2, 0.5,
-                    repeat_interval, repeat_interval, repeat_interval, seed);
-            ns += 4 * stb_perlin_noise3_seed(ix * 4, jy * 4, 0.5,
-                    repeat_interval, repeat_interval, repeat_interval, seed);
-            ns += 8 * stb_perlin_noise3_seed(ix * 8, jy * 8, 0.5,
-                    repeat_interval, repeat_interval, repeat_interval, seed);
-            ns += 16 * stb_perlin_noise3_seed(ix * 16, jy * 16, 0.5,
-                    repeat_interval, repeat_interval, repeat_interval, seed);
-            ns += 32 * stb_perlin_noise3_seed(ix * 32, jy * 32, 0.5,
-                    repeat_interval, repeat_interval, repeat_interval, seed);
-            ns /= 38;
-            //double ns = noiseOctavePerlin((float)i / scale, (float)j / scale, 0.5,
-            //        2, 99);
-            int sign = (ns < 0);
-            ns = pow(fabs(ns), 0.5);
-            if (sign)
-                ns *= -1;
-            //ns = pow(ns, 0.75);
-            //printf("%f\n", ns);
-            u8 fin = fabs(ns * 255.0f);
-            if (fin < 240) {
-                while (fin++ % 1 != 0);
-            }
-            if (fin > hmax) hmax = fin;
-            if (fin < hmin) hmin = fin;
-            img[i][j] = fin;
-        }
-    }
-
-    printf("%d %d\n", hmin, hmax);
-
-    struct Image image = { .data = img, size_img, size_img, 1, PIXELFORMAT_UNCOMPRESSED_GRAYSCALE};
-    //ExportImage(img_struct, "raylib_export.png");
-    //Image image = LoadImage("raylib_export.png");     // Load heightmap image (RAM)
+    Image image = GenImagePerlinNoise(1000, 1000, 0, 0, 1);
     Texture2D texture = LoadTextureFromImage(image);        // Convert image to texture (VRAM)
 
     // Define our custom camera to look into our 3d world
