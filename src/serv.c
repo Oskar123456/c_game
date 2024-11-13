@@ -23,28 +23,8 @@ void ev_handler(struct mg_connection *c, int ev, void *ev_data)
 
         if (mg_match(hm->uri, mg_str("/api/weather"), NULL))
 
-        { /* weather api */
-            bstring_t weather_report_json;
-            bstring_init(weather_report_json);
-            struct mg_str caps[3];
+        { /* api */
 
-            if (hm->query.buf != NULL && hm->query.len > 0 && mg_match(hm->query, mg_str("city=*"), caps)) {
-                if (caps[0].len > 0) {
-                    struct mg_str city_str = mg_strdup(caps[0]);
-                    get_weather_str(weather_report_json, city_str.buf);
-                    free(city_str.buf);
-                }
-            }
-
-            c_log_info(LOG_TAG, "%.*s %.*s", hm->uri.len, hm->uri.buf, hm->query.len, hm->query.buf);
-
-            bstring_push_back(weather_report_json, 0);
-            if (bstring_size(weather_report_json) > 1)
-                mg_http_reply(c, 200, "Content-Type: application/json\r\n",
-                        (char*) bstring_view(weather_report_json, 0, bstring_size(weather_report_json)));
-            else
-                mg_http_reply(c, 200, "Content-Type: application/json\r\n",
-                        "{%m: %m}", mg_print_esc, 0, "404", mg_print_esc, 0, "not found");
         }
 
         else

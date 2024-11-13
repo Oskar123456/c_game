@@ -26,6 +26,6 @@ void c_log_error(const char* tag, int line, const char* message, ...);
  * produce timestamp (GMT) with timezone
  * @param dest uninitialized string_t
  */
-void c_log_timestamp(string_t dest);
+void c_log_timestamp(sds dest);
 
 #endif

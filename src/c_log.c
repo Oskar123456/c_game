@@ -121,7 +121,7 @@ void c_log_success(const char* tag, int line, const char* message, ...)
     va_end(args);
 }
 
-void c_log_timestamp(string_t dest)
+void c_log_timestamp(sds dest)
 {
     char current_time_cstr[32];
     struct tm current_time_tm;
@@ -129,5 +129,5 @@ void c_log_timestamp(string_t dest)
     clock_gettime(CLOCK_REALTIME, &current_time);
     gmtime_r(&current_time.tv_sec, &current_time_tm);
     strftime(current_time_cstr, 32, "%Y-%m-%d %H:%M:%S %Z", &current_time_tm);
-    string_init_set_str(dest, current_time_cstr);
+    sdscat(dest, current_time_cstr);
 }

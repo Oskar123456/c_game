@@ -1,8 +1,6 @@
 # game programming in C
-___
 
 ## Libs
-___
 
   - **stb**
     + []
