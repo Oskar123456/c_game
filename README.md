@@ -9,11 +9,15 @@
 
 ## Libs
 
+  - **raylib**
+    + []
   - **stb**
     + []
   - **cJSON**
     + []
   - **sds**
+    + []
+  - **klib**
     + []
   - **Mongoose**
     + https://mongoose.ws
