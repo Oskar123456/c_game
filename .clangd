@@ -9,5 +9,8 @@ InlayHints:
   DeducedTypes: Yes
   TypeNameLimit: 24
 
+Index:
+  StandardLibrary: No
+
 
 
