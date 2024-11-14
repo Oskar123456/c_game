@@ -19,7 +19,7 @@ OBJEXT      := o
 
 #Flags, Libraries and Includes
 CFLAGS      := -fopenmp -Wall -g
-LIB         := -lm -lpq -lcurl
+LIB         := -lm -lpq -lcurl lib/libraylib.a
 INC         := -I$(INCDIR) -I$(LIBDIR)
 INCDEP      := -I$(INCDIR)
 # Mongoose build options. See https://mongoose.ws/documentation/#build-options
@@ -66,7 +66,7 @@ cleaner: clean
 
 #Link
 $(TARGET): $(OBJECTS)
-	$(CC) -o $(TARGETDIR)/$(TARGET) $^ $(LIB) lib/libraylib.a
+	$(CC) -o $(TARGETDIR)/$(TARGET) $^ $(LIB) 
 
 #Compile
 $(BUILDDIR)/%.$(OBJEXT): $(SRCDIR)/%.$(SRCEXT)
