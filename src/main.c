@@ -10,6 +10,7 @@ License:            none
 #include "../include/db.h"
 #include "../include/c_log.h"
 #include "../include/util.h"
+#include "../include/world.h"
 #include "../include/raylib/raylib.h"
 #include "../include/raylib/raymath.h"
 #include "../include/raylib/rcamera.h"
@@ -33,6 +34,7 @@ struct Unit {
     int    direction, moving;
     float movement_speed;
     float movement_speed_sprint;
+    float direction_angle;
 };
 
 void UpdateCameraCustom(Camera *camera, int mode);
@@ -92,18 +94,21 @@ void pollKeys()
         player_unit.moving = 0;
 
     if (IsKeyDown(KEY_UP)) {
+        player_unit.direction_angle = 0;
         if (!IsKeyDown(KEY_LEFT_SHIFT))
             unitMove(&player_unit, 0, 0, player_unit.movement_speed);
         else
             unitMove(&player_unit, 0, 0, player_unit.movement_speed_sprint);
     }
     if (IsKeyDown(KEY_DOWN)) {
+        player_unit.direction_angle = 180;
         if (!IsKeyDown(KEY_LEFT_SHIFT))
             unitMove(&player_unit, 0, 0, -player_unit.movement_speed);
         else
             unitMove(&player_unit, 0, 0, -player_unit.movement_speed_sprint);
     }
     if (IsKeyDown(KEY_LEFT)) {
+        player_unit.direction_angle = 90;
         player_unit.direction = 0;
         if (!IsKeyDown(KEY_LEFT_SHIFT))
             unitMove(&player_unit, player_unit.movement_speed, 0, 0);
@@ -111,6 +116,7 @@ void pollKeys()
             unitMove(&player_unit, player_unit.movement_speed_sprint, 0, 0);
     }
     if (IsKeyDown(KEY_RIGHT)) {
+        player_unit.direction_angle = 270;
         player_unit.direction = 1;
         if (!IsKeyDown(KEY_LEFT_SHIFT))
             unitMove(&player_unit, -player_unit.movement_speed, 0, 0);
@@ -137,30 +143,38 @@ int main(int argc, char *argv[])
     //DisableCursor();
     SetExitKey(0);
 
-    camera.position = (Vector3){ 0.0f, 20.0f, -20.0f };
+    camera.position = (Vector3){ 0.0f, 300.0f, -300.0f };
     camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };
-    camera.fovy = 45.0f;
+    camera.fovy = 10.0f;
     camera.projection = CAMERA_PERSPECTIVE;
 
-    int n_meshes = 100, mesh_size = 100;
-    Model models[n_meshes];
-    Vector3 model_positions[n_meshes];
+//    int n_meshes = 100, mesh_size = 100;
+//    Model models[n_meshes];
+//    Vector3 model_positions[n_meshes];
+//
+//    for (int i = 0; i < n_meshes; ++i) {
+//        int x_coord = (i % 10) * mesh_size;
+//        int z_coord = (i / 10) * mesh_size;
+//        Image image = GenImagePerlinNoise(mesh_size, mesh_size, x_coord, z_coord, 1);
+//        Texture2D texture = LoadTextureFromImage(image);
+//
+//        Mesh mesh = GenMeshPlane(mesh_size, mesh_size, 1, 1);
+//        models[i] = LoadModelFromMesh(mesh);
+//
+//        models[i].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
+//        model_positions[i] = (Vector3) { x_coord, 0.0f, z_coord };
+//
+//        UnloadImage(image);
+//    }
 
-    for (int i = 0; i < n_meshes; ++i) {
-        int x_coord = (i % 10) * mesh_size;
-        int z_coord = (i / 10) * mesh_size;
-        Image image = GenImagePerlinNoise(mesh_size, mesh_size, x_coord, z_coord, 1);
-        Texture2D texture = LoadTextureFromImage(image);
+    worldInit();
+    worldChunk **chunks = malloc(sizeof(worldChunk*) * 9);
 
-        Mesh mesh = GenMeshPlane(mesh_size, mesh_size, 1, 1);
-        models[i] = LoadModelFromMesh(mesh);
-
-        models[i].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
-        model_positions[i] = (Vector3) { x_coord, 0.0f, z_coord };
-
-        UnloadImage(image);             // Unload heightmap image from RAM, already uploaded to VRAM
+    for (int i = 0; i < 3; ++i) {
+        for (int j = 0; j < 3; ++j) {
+            chunks[i * 3 + j] = worldGenChunk(j * CHUNK_SIZE, i * CHUNK_SIZE, 1, 55);
+        }
     }
-
 
 
     /* game stuff begins */
@@ -208,13 +222,24 @@ int main(int argc, char *argv[])
         .models_n = 6,
         .movement_speed = 0.3,
         .movement_speed_sprint = 0.6,
-        .y = 1,
+        .y = 10,
     };
     camera.target = player_unit.pos;
+
+    // Load gltf model
+    //Model model = LoadModel("resources/models/baby_ares.glb");
+    //Vector3 position = { 0.0f, 0.0f, 0.0f }; // Set model position
+
+    // Load gltf model animations
+    //int animsCount = 0;
+    //unsigned int animIndex = 0;
+    //unsigned int animCurrentFrame = 0;
+    //ModelAnimation *modelAnimations = LoadModelAnimations("resources/models/baby_ares.glb", &animsCount);
 
     /* game stuff ends */
 
     camera.target = player_unit.pos;
+
 
     u64 frame_number = 0;
     int anim_frame_time = 10;
@@ -237,6 +262,11 @@ int main(int argc, char *argv[])
         //printf("%f %f %f\n", camera.up.x, camera.up.x, camera.up.x);
         if (frame_number % anim_frame_time == 0)
             player_unit.model_current = (player_unit.model_current + 1) % player_unit.models_n;
+
+        // Update model animation
+        //ModelAnimation anim = modelAnimations[animIndex];
+        //animCurrentFrame = (animCurrentFrame + 1)%anim.frameCount;
+        //UpdateModelAnimation(model, anim, animCurrentFrame);
         //----------------------------------------------------------------------------------
 
         // Draw
@@ -247,11 +277,14 @@ int main(int argc, char *argv[])
 
             BeginMode3D(camera);
 
-                for (int i = 0; i < n_meshes; ++i) {
-                    DrawModel(models[i], model_positions[i], 1.0f, (Color) { 0xC2, 0xB2, 0x80, 0xFF });
+                //for (int i = 0; i < n_meshes; ++i) {
+                //    DrawModel(models[i], model_positions[i], 1.0f, (Color) { 0xC2, 0xB2, 0x80, 0xFF });
+                //}
+
+                for (int i = 0; i < 3; ++i) {
+                    worldRenderChunk(chunks[i]);
                 }
 
-                //DrawModel(player_unit.model, player_unit.pos, 1.0, WHITE);
                 if (player_unit.moving)
                     DrawModelEx(
                             player_unit.models[player_unit.model_current + player_unit.direction * player_unit.models_n],
@@ -266,6 +299,9 @@ int main(int argc, char *argv[])
                             (Vector3) { 1, 0, 0 },
                             -45.0f, (Vector3) { 1, 1, 1 },
                             WHITE);
+
+                //DrawModelEx(model, player_unit.pos, (Vector3) { 0, 1, 0 },
+                //        player_unit.direction_angle, (Vector3) { 0.2, 0.2, 0.2 }, BLUE);
 
                 DrawGrid(20, 1.0f);
 
