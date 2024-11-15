@@ -33,3 +33,4 @@ void worldInit();
 void worldRenderChunk(worldChunk *chunk);
 worldChunk* worldGenChunk(int x_off, int z_off, float scale, int seed);
 void DrawCubeTexture(Texture2D texture, Vector3 position, float width, float height, float length, Color color);
+Mesh worldGenMeshCube(float width, float height, float length);

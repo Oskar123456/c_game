@@ -171,7 +171,7 @@ int main(int argc, char *argv[])
     //DisableCursor();
     SetExitKey(0);
 
-    camera.position = (Vector3){ 0.0f, 300.0f, -300.0f };
+    camera.position = (Vector3){ 0.0f, 150.0f, -150.0f };
     camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };
     camera.fovy = 10.0f;
     camera.projection = CAMERA_PERSPECTIVE;
@@ -198,7 +198,7 @@ int main(int argc, char *argv[])
     worldInit();
     worldChunk **chunks = malloc(sizeof(worldChunk*) * 9);
 
-    for (int i = 0; i < 3; ++i) {
+    for (int i = 0; i < 1; ++i) {
         for (int j = 0; j < 3; ++j) {
             chunks[i * 3 + j] = worldGenChunk(
                     (j % 3) * CHUNK_SIZE,
@@ -257,7 +257,6 @@ int main(int argc, char *argv[])
 
     /* game stuff ends */
 
-    Shader cube_shader = LoadShader("resources/shaders/basic.vs", "resources/shaders/basic.fs");
 
     u64 frame_number = 0;
     int anim_frame_time = 10;
@@ -299,7 +298,7 @@ int main(int argc, char *argv[])
                 //    DrawModel(models[i], model_positions[i], 1.0f, (Color) { 0xC2, 0xB2, 0x80, 0xFF });
                 //}
 
-                for (int i = 0; i < 3; ++i) {
+                for (int i = 0; i < 1; ++i) {
                     worldRenderChunk(chunks[i]);
                 }
 
