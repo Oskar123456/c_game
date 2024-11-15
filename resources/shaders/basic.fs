@@ -65,15 +65,23 @@ void main()
             lightDot += lights[i].color.rgb*NdotL;
 
             float specCo = 0.0;
-            if (NdotL > 0.0) specCo = pow(max(0.0, dot(viewD, reflect(-(light), normal))), 16.0); // 16 refers to shine
-            specular += specCo;
+            if (NdotL > 0.0) specCo = pow(max(0.0, dot(viewD, reflect(-(light), normal))), 10.0); // 16 refers to shine
+            specular += specCo / 41.0;
         }
     }
 
     finalColor = (texelColor*((tint + vec4(specular, 1.0))*vec4(lightDot, 1.0)));
-    finalColor += texelColor*(ambient/5.0)*tint;
-
+    finalColor += texelColor*(ambient/0.5)*tint;
+    finalColor /= 3.5;
     // Gamma correction
-    finalColor = pow(finalColor, vec4(1.0/2.2));
+    //finalColor = pow(finalColor, vec4(1.0/2.2));
+    
+    if (fragTexCoord.x > 0.98 || fragTexCoord.y > 0.98 
+            || fragTexCoord.x < 0.03 || fragTexCoord.y < 0.03
+            || (fragTexCoord.x > 0.47 && fragTexCoord.x < 0.53)) {
+        finalColor.x /= 4;
+        finalColor.y /= 4;
+        finalColor.z /= 4;
+    }
 }
 

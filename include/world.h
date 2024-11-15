@@ -14,7 +14,7 @@ License:            none
 #include "../include/raylib/raymath.h"
 #include "../include/raylib/rcamera.h"
 
-#define CHUNK_SIZE 100
+#define CHUNK_SIZE 10
 #define WORLD_ELEVATION_LEVELS 10
 
 typedef struct worldCube worldCube;
@@ -22,7 +22,7 @@ typedef struct worldChunk worldChunk;
 
 enum CUBE_TYPE { CUBE_TYPE_GRASS, CUBE_TYPE_DIRT, CUBE_TYPE_SNOW, CUBE_TYPE_NUM, };
 
-struct worldCube { u8 type, height; };
+struct worldCube { u8 type, height, rng; };
 
 struct worldChunk {
     int x, z; /* index, not cube coords */

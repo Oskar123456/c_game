@@ -85,10 +85,7 @@ void worldRenderChunk(worldChunk *chunk)
     for (int i = 0; i < CHUNK_SIZE; ++i) {
         for (int j = 0; j < CHUNK_SIZE; ++j) {
             worldCube* cube = &chunk->cubes[i][j];
-            Vector3 pos = { chunk->x * CHUNK_SIZE + j, chunk->cubes[i][j].height, chunk->z * CHUNK_SIZE + i};
-            //DrawCubeTexture(_cube_textures[chunk->cubes[i][j].type],
-            //        pos, 1, 1, 1, WHITE);
-            //printf("%f %f %f\n", pos.x, pos.y, pos.z);
+            Vector3 pos = { chunk->x * CHUNK_SIZE + j, chunk->cubes[i][j].height * 0.6f, chunk->z * CHUNK_SIZE + i};
             DrawModel(_cube_models[cube->type], pos, 1, WHITE);
         }
     }
@@ -122,166 +119,16 @@ void worldInit()
     _cube_shader.locs[SHADER_LOC_VECTOR_VIEW]  = GetShaderLocation(_cube_shader, "viewPos");
 
     int ambientLoc = GetShaderLocation(_cube_shader, "ambient");
-    SetShaderValue(_cube_shader, ambientLoc, (float[4]){ 0.7f, 0.7f, 0.7f, 1.0f }, SHADER_UNIFORM_VEC4);
+    SetShaderValue(_cube_shader, ambientLoc, (float[4]){ 0.8f, 0.8f, 0.8f, 1.0f }, SHADER_UNIFORM_VEC4);
     // Using just 1 point lights
     CreateLight(LIGHT_DIRECTIONAL, (Vector3){ 0, 100, 0 },
             Vector3Zero(), (Color) { 0xFD, 0xFB, 0xD3, 0xFF }, _cube_shader);
+    //CreateLight(LIGHT_DIRECTIONAL, (Vector3){ 0, 100, 0 },
+    //        Vector3Zero(), WHITE, _cube_shader);
 
     _cube_models[CUBE_TYPE_GRASS].materials[0].shader = _cube_shader;
     _cube_models[CUBE_TYPE_DIRT].materials[0].shader = _cube_shader;
     _cube_models[CUBE_TYPE_SNOW].materials[0].shader = _cube_shader;
-}
-
-// NOTE: Cube position is the center position
-void DrawCubeTexture(Texture2D texture, Vector3 position,
-        float width, float height, float length, Color color)
-{
-    float x = position.x;
-    float y = position.y;
-    float z = position.z;
-
-    // Set desired texture to be enabled while drawing following vertex data
-    rlSetTexture(texture.id);
-
-    // Vertex data transformation can be defined with the commented lines,
-    // but in this example we calculate the transformed vertex data directly when calling rlVertex3f()
-    //rlPushMatrix();
-        // NOTE: Transformation is applied in inverse order (scale -> rotate -> translate)
-        //rlTranslatef(2.0f, 0.0f, 0.0f);
-        //rlRotatef(45, 0, 1, 0);
-        //rlScalef(2.0f, 2.0f, 2.0f);
-
-        rlBegin(RL_QUADS);
-            rlColor4ub(color.r, color.g, color.b, color.a);
-            // Front Face
-            rlNormal3f(0.0f, 0.0f, 1.0f);       // Normal Pointing Towards Viewer
-            rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);  // Bottom Left Of The Texture and Quad
-            rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);  // Bottom Right Of The Texture and Quad
-            rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);  // Top Right Of The Texture and Quad
-            rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);  // Top Left Of The Texture and Quad
-            // Back Face
-            rlNormal3f(0.0f, 0.0f, - 1.0f);     // Normal Pointing Away From Viewer
-            rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);  // Bottom Right Of The Texture and Quad
-            rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);  // Top Right Of The Texture and Quad
-            rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);  // Top Left Of The Texture and Quad
-            rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);  // Bottom Left Of The Texture and Quad
-            // Top Face
-            rlNormal3f(0.0f, 1.0f, 0.0f);       // Normal Pointing Up
-            rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);  // Top Left Of The Texture and Quad
-            rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);  // Bottom Left Of The Texture and Quad
-            rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);  // Bottom Right Of The Texture and Quad
-            rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);  // Top Right Of The Texture and Quad
-            // Bottom Face
-            rlNormal3f(0.0f, - 1.0f, 0.0f);     // Normal Pointing Down
-            rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);  // Top Right Of The Texture and Quad
-            rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);  // Top Left Of The Texture and Quad
-            rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);  // Bottom Left Of The Texture and Quad
-            rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);  // Bottom Right Of The Texture and Quad
-            // Right face
-            rlNormal3f(1.0f, 0.0f, 0.0f);       // Normal Pointing Right
-            rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);  // Bottom Right Of The Texture and Quad
-            rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);  // Top Right Of The Texture and Quad
-            rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);  // Top Left Of The Texture and Quad
-            rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);  // Bottom Left Of The Texture and Quad
-            // Left Face
-            rlNormal3f( - 1.0f, 0.0f, 0.0f);    // Normal Pointing Left
-            rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);  // Bottom Left Of The Texture and Quad
-            rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);  // Bottom Right Of The Texture and Quad
-            rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);  // Top Right Of The Texture and Quad
-            rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);  // Top Left Of The Texture and Quad
-        rlEnd();
-    //rlPopMatrix();
-
-    rlSetTexture(0);
-}
-
-// Draw cube with texture piece applied to all faces
-void DrawCubeTextureRec(Texture2D texture, Rectangle source,
-        Vector3 position, float width, float height, float length, Color color)
-{
-    float x = position.x;
-    float y = position.y;
-    float z = position.z;
-    float texWidth = (float)texture.width;
-    float texHeight = (float)texture.height;
-
-    // Set desired texture to be enabled while drawing following vertex data
-    rlSetTexture(texture.id);
-
-    // We calculate the normalized texture coordinates for the desired texture-source-rectangle
-    // It means converting from (tex.width, tex.height) coordinates to [0.0f, 1.0f] equivalent
-    rlBegin(RL_QUADS);
-        rlColor4ub(color.r, color.g, color.b, color.a);
-
-        // Front face
-        rlNormal3f(0.0f, 0.0f, 1.0f);
-        rlTexCoord2f(source.x/texWidth, (source.y + source.height)/texHeight);
-        rlVertex3f(x - width/2, y - height/2, z + length/2);
-        rlTexCoord2f((source.x + source.width)/texWidth, (source.y + source.height)/texHeight);
-        rlVertex3f(x + width/2, y - height/2, z + length/2);
-        rlTexCoord2f((source.x + source.width)/texWidth, source.y/texHeight);
-        rlVertex3f(x + width/2, y + height/2, z + length/2);
-        rlTexCoord2f(source.x/texWidth, source.y/texHeight);
-        rlVertex3f(x - width/2, y + height/2, z + length/2);
-
-        // Back face
-        rlNormal3f(0.0f, 0.0f, - 1.0f);
-        rlTexCoord2f((source.x + source.width)/texWidth, (source.y + source.height)/texHeight);
-        rlVertex3f(x - width/2, y - height/2, z - length/2);
-        rlTexCoord2f((source.x + source.width)/texWidth, source.y/texHeight);
-        rlVertex3f(x - width/2, y + height/2, z - length/2);
-        rlTexCoord2f(source.x/texWidth, source.y/texHeight);
-        rlVertex3f(x + width/2, y + height/2, z - length/2);
-        rlTexCoord2f(source.x/texWidth, (source.y + source.height)/texHeight);
-        rlVertex3f(x + width/2, y - height/2, z - length/2);
-
-        // Top face
-        rlNormal3f(0.0f, 1.0f, 0.0f);
-        rlTexCoord2f(source.x/texWidth, source.y/texHeight);
-        rlVertex3f(x - width/2, y + height/2, z - length/2);
-        rlTexCoord2f(source.x/texWidth, (source.y + source.height)/texHeight);
-        rlVertex3f(x - width/2, y + height/2, z + length/2);
-        rlTexCoord2f((source.x + source.width)/texWidth, (source.y + source.height)/texHeight);
-        rlVertex3f(x + width/2, y + height/2, z + length/2);
-        rlTexCoord2f((source.x + source.width)/texWidth, source.y/texHeight);
-        rlVertex3f(x + width/2, y + height/2, z - length/2);
-
-        // Bottom face
-        rlNormal3f(0.0f, - 1.0f, 0.0f);
-        rlTexCoord2f((source.x + source.width)/texWidth, source.y/texHeight);
-        rlVertex3f(x - width/2, y - height/2, z - length/2);
-        rlTexCoord2f(source.x/texWidth, source.y/texHeight);
-        rlVertex3f(x + width/2, y - height/2, z - length/2);
-        rlTexCoord2f(source.x/texWidth, (source.y + source.height)/texHeight);
-        rlVertex3f(x + width/2, y - height/2, z + length/2);
-        rlTexCoord2f((source.x + source.width)/texWidth, (source.y + source.height)/texHeight);
-        rlVertex3f(x - width/2, y - height/2, z + length/2);
-
-        // Right face
-        rlNormal3f(1.0f, 0.0f, 0.0f);
-        rlTexCoord2f((source.x + source.width)/texWidth, (source.y + source.height)/texHeight);
-        rlVertex3f(x + width/2, y - height/2, z - length/2);
-        rlTexCoord2f((source.x + source.width)/texWidth, source.y/texHeight);
-        rlVertex3f(x + width/2, y + height/2, z - length/2);
-        rlTexCoord2f(source.x/texWidth, source.y/texHeight);
-        rlVertex3f(x + width/2, y + height/2, z + length/2);
-        rlTexCoord2f(source.x/texWidth, (source.y + source.height)/texHeight);
-        rlVertex3f(x + width/2, y - height/2, z + length/2);
-
-        // Left face
-        rlNormal3f( - 1.0f, 0.0f, 0.0f);
-        rlTexCoord2f(source.x/texWidth, (source.y + source.height)/texHeight);
-        rlVertex3f(x - width/2, y - height/2, z - length/2);
-        rlTexCoord2f((source.x + source.width)/texWidth, (source.y + source.height)/texHeight);
-        rlVertex3f(x - width/2, y - height/2, z + length/2);
-        rlTexCoord2f((source.x + source.width)/texWidth, source.y/texHeight);
-        rlVertex3f(x - width/2, y + height/2, z + length/2);
-        rlTexCoord2f(source.x/texWidth, source.y/texHeight);
-        rlVertex3f(x - width/2, y + height/2, z - length/2);
-
-    rlEnd();
-
-    rlSetTexture(0);
 }
 
 Light CreateLight(int type, Vector3 position, Vector3 target, Color color, Shader shader)
@@ -372,35 +219,35 @@ Mesh worldGenMeshCube(float width, float height, float length)
 
     float texcoords[] = {
         /* back */
-        1.0f, 0.0f,
-        0.0f, 0.0f,
-        0.0f, 1.0f,
-        1.0f, 1.0f,
+        0.99f, 0.01f,
+        0.01f, 0.01f,
+        0.01f, 0.99f,
+        0.99f, 0.99f,
         /* front */
-        1.0f, 1.0f,
-        1.0f, 0.0f,
-        0.5f, 0.0f,
-        0.5f, 1.0f,
+        0.99f, 0.99f,
+        0.99f, 0.01f,
+        0.55f, 0.01f,
+        0.55f, 0.99f,
         /* up */
-        0.0f, 1.0f,
-        0.0f, 0.0f,
-        0.5f, 0.0f,
-        0.5f, 1.0f,
+        0.01f, 0.99f,
+        0.01f, 0.01f,
+        0.49f, 0.01f,
+        0.49f, 0.99f,
         /* down */
-        1.0f, 1.0f,
-        0.0f, 1.0f,
-        0.0f, 0.0f,
-        1.0f, 0.0f,
+        0.99f, 0.99f,
+        0.01f, 0.99f,
+        0.01f, 0.01f,
+        0.99f, 0.01f,
         /* left */
-        0.5f, 1.0f,
-        0.5f, 0.0f,
-        1.0f, 0.0f,
-        0.5f, 1.0f,
+        0.51f, 0.99f,
+        0.51f, 0.01f,
+        0.99f, 0.01f,
+        0.51f, 0.99f,
         /* right */
-        1.0f, 1.0f,
-        0.5f, 1.0f,
-        0.5f, 0.0f,
-        1.0f, 0.0f,
+        0.99f, 0.99f,
+        0.51f, 0.99f,
+        0.51f, 0.01f,
+        0.99f, 0.01f,
     };
 
     float normals[] = {

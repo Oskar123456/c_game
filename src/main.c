@@ -24,6 +24,10 @@ static float CAMERA_MOVE_SPEED = 45.0f;
 #define CAMERA_MOUSE_MOVE_SENSITIVITY                   0.003f
 #define CAMERA_ORBITAL_SPEED                            0.5f
 
+float CAMERA_OFF_X = 50.0f;
+float CAMERA_OFF_Y = 50.0f;
+float CAMERA_OFF_Z = -50.0f;
+
 struct Pixel { u8 r, g, b, a; };
 struct Unit {
     union {
@@ -36,6 +40,7 @@ struct Unit {
     int    direction, moving;
     float movement_speed;
     float movement_speed_sprint;
+    bool  is_sprinting;
     float direction_angle;
 };
 
@@ -48,14 +53,45 @@ static bool fullscreen;
 static bool paused;
 struct Unit player_unit;
 
-void unitMove(struct Unit* unit, float x, float y, float z)
+void unitMove(struct Unit* unit, int x, int y, int z)
 {
-    unit->x += x;
-    unit->y += y;
-    unit->z += z;
-    camera.position.x += x;
-    camera.position.y += y;
-    camera.position.z += z;
+    Vector3 cross = Vector3CrossProduct(Vector3Subtract(camera.position, player_unit.pos), camera.up);
+    Vector3 cross_cross = Vector3CrossProduct(cross, camera.up);
+    cross = Vector3Normalize(cross);
+    cross_cross = Vector3Normalize(cross_cross);
+    //cross.x *= x;
+    //cross.y *= y;
+    //cross.z *= z;
+
+    if (unit->is_sprinting) {
+        cross = Vector3Scale(cross, unit->movement_speed_sprint);
+        cross_cross = Vector3Scale(cross_cross, unit->movement_speed_sprint);
+    }
+    else {
+        cross = Vector3Scale(cross, unit->movement_speed);
+        cross_cross = Vector3Scale(cross_cross, unit->movement_speed);
+    }
+
+    if (x < 0) {
+        unit->pos = Vector3Add(unit->pos, cross);
+        camera.position = Vector3Add(camera.position, cross);
+    }
+    if (x > 0) {
+        unit->pos = Vector3Subtract(unit->pos, cross);
+        camera.position = Vector3Subtract(camera.position, cross);
+    }
+    if (z > 0) {
+        unit->pos = Vector3Add(unit->pos, cross_cross);
+        camera.position = Vector3Add(camera.position, cross_cross);
+    }
+    if (z < 0) {
+        unit->pos = Vector3Subtract(unit->pos, cross_cross);
+        camera.position = Vector3Subtract(camera.position, cross_cross);
+    }
+
+    //camera.position.x = unit->x + CAMERA_OFF_X;
+    //camera.position.y = unit->y + CAMERA_OFF_Y;
+    //camera.position.z = unit->z + CAMERA_OFF_Z;
     camera.target = unit->pos;
 }
 
@@ -71,10 +107,8 @@ void pollKeys()
 {
     if (IsKeyPressed(KEY_ESCAPE)) {
         paused = !paused;
-        //if (paused)
-           //DisableCursor();
-        //else
-           //EnableCursor();
+//        if (paused)
+//        else
     }
     if (IsKeyPressed(KEY_F1))
         SetExitKey(KEY_F1);
@@ -86,9 +120,9 @@ void pollKeys()
     }
 
     if (IsKeyDown(KEY_LEFT_SHIFT))
-        CAMERA_MOVE_SPEED = 145.0f;
+        player_unit.is_sprinting = true;
     else
-        CAMERA_MOVE_SPEED = 45.0f;
+        player_unit.is_sprinting = false;
 
     if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_RIGHT))
         player_unit.moving = 1;
@@ -97,33 +131,21 @@ void pollKeys()
 
     if (IsKeyDown(KEY_UP)) {
         player_unit.direction_angle = 0;
-        if (!IsKeyDown(KEY_LEFT_SHIFT))
-            unitMove(&player_unit, 0, 0, player_unit.movement_speed);
-        else
-            unitMove(&player_unit, 0, 0, player_unit.movement_speed_sprint);
+            unitMove(&player_unit, 0, 0, 1);
     }
     if (IsKeyDown(KEY_DOWN)) {
         player_unit.direction_angle = 180;
-        if (!IsKeyDown(KEY_LEFT_SHIFT))
-            unitMove(&player_unit, 0, 0, -player_unit.movement_speed);
-        else
-            unitMove(&player_unit, 0, 0, -player_unit.movement_speed_sprint);
+            unitMove(&player_unit, 0, 0, -1);
     }
     if (IsKeyDown(KEY_LEFT)) {
         player_unit.direction_angle = 90;
         player_unit.direction = 0;
-        if (!IsKeyDown(KEY_LEFT_SHIFT))
-            unitMove(&player_unit, player_unit.movement_speed, 0, 0);
-        else
-            unitMove(&player_unit, player_unit.movement_speed_sprint, 0, 0);
+            unitMove(&player_unit, -1, 0, 0);
     }
     if (IsKeyDown(KEY_RIGHT)) {
         player_unit.direction_angle = 270;
         player_unit.direction = 1;
-        if (!IsKeyDown(KEY_LEFT_SHIFT))
-            unitMove(&player_unit, -player_unit.movement_speed, 0, 0);
-        else
-            unitMove(&player_unit, -player_unit.movement_speed_sprint, 0, 0);
+            unitMove(&player_unit, 1, 0, 0);
     }
 }
 
@@ -171,7 +193,7 @@ int main(int argc, char *argv[])
     //DisableCursor();
     SetExitKey(0);
 
-    camera.position = (Vector3){ 0.0f, 150.0f, -150.0f };
+    camera.position = (Vector3){ CAMERA_OFF_X, CAMERA_OFF_Y, CAMERA_OFF_Z };
     camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };
     camera.fovy = 10.0f;
     camera.projection = CAMERA_PERSPECTIVE;
@@ -231,6 +253,10 @@ int main(int argc, char *argv[])
         scarfy_textures[i] = LoadTextureFromImage(scarfy_sprites[i]);
         scarfy_models[i] = LoadModelFromMesh(player_mesh);
         scarfy_models[i].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = scarfy_textures[i];
+
+        Matrix rotation_y = MatrixRotateY(-M_PI / 4);
+        Matrix rotation_x = MatrixRotate((Vector3){ 1, 0, 1 }, -M_PI / 4);
+        scarfy_models[i].transform = MatrixMultiply(rotation_y, rotation_x);
     }
 
     for (int i = 6; i < 12; ++i) {
@@ -244,16 +270,21 @@ int main(int argc, char *argv[])
         scarfy_textures[i] = LoadTextureFromImage(scarfy_sprites[i]);
         scarfy_models[i] = LoadModelFromMesh(player_mesh);
         scarfy_models[i].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = scarfy_textures[i];
+
+        Matrix rotation_y = MatrixRotateY(-M_PI / 4);
+        Matrix rotation_x = MatrixRotate((Vector3){ 1, 0, 1 }, -M_PI / 4);
+        scarfy_models[i].transform = MatrixMultiply(rotation_y, rotation_x);
     }
 
     player_unit = (struct Unit) {
         .models = scarfy_models,
         .models_n = 6,
-        .movement_speed = 0.3,
-        .movement_speed_sprint = 0.6,
-        .y = 10,
+        .movement_speed = 0.2,
+        .movement_speed_sprint = 0.4,
+        .y = 0,
     };
     camera.target = player_unit.pos;
+
 
     /* game stuff ends */
 
@@ -306,15 +337,14 @@ int main(int argc, char *argv[])
                     DrawModelEx(
                             player_unit.models[player_unit.model_current + player_unit.direction * player_unit.models_n],
                             player_unit.pos,
-                            (Vector3) { 1, 0, 0 },
-                            -45.0f, (Vector3) { 1, 1, 1 },
-                            WHITE);
+                            (Vector3) { 1, 1, 1 }, 0,
+                            (Vector3) { 1, 1, 1 }, WHITE);
                 else
                     DrawModelEx(
                             player_unit.models[player_unit.direction * player_unit.models_n + 2],
                             player_unit.pos,
-                            (Vector3) { 1, 0, 0 },
-                            -45.0f, (Vector3) { 1, 1, 1 },
+                            (Vector3) { 1, 1, 1 }, 0,
+                            (Vector3) { 1, 1, 1 },
                             WHITE);
 
                 //DrawModelEx(model, player_unit.pos, (Vector3) { 0, 1, 0 },
@@ -333,8 +363,12 @@ int main(int argc, char *argv[])
             DrawFPS(10, 10);
             sds player_info = sdscatprintf(sdsempty(), "Player pos: x:%.2fy:%.2fz:%.2f",
                     player_unit.x, player_unit.y, player_unit.z);
+            sds cam_info = sdscatprintf(sdsempty(), "Camera pos: x:%.2fy:%.2fz:%.2f",
+                    camera.position.x, camera.position.y, camera.position.z);
             DrawText(player_info, 4, 40, 8, BLACK);
+            DrawText(cam_info, 4, 60, 8, BLACK);
             sdsfree(player_info);
+            sdsfree(cam_info);
 
         EndDrawing();
         //----------------------------------------------------------------------------------
@@ -406,9 +440,11 @@ void UpdateCameraCustom(Camera *camera, int mode)
         }
 
         // Keyboard support
-        if (IsKeyDown(KEY_W)) CameraMoveForward(camera, cameraMoveSpeed * 2, moveInWorldPlane);
-        //if (IsKeyDown(KEY_A)) CameraMoveRight(camera, -cameraMoveSpeed, moveInWorldPlane);
-        if (IsKeyDown(KEY_S)) CameraMoveForward(camera, -cameraMoveSpeed * 2, moveInWorldPlane);
+        if (IsKeyDown(KEY_W))
+            CameraMoveForward(camera, 0.5, false);
+        if (IsKeyDown(KEY_S))
+            CameraMoveForward(camera, -0.5, false);
+
         //if (IsKeyDown(KEY_D)) CameraMoveRight(camera, cameraMoveSpeed, moveInWorldPlane);
 
         // Gamepad movement
