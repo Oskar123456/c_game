@@ -1,11 +1,12 @@
-# game programming in C
+# Game Programming in C
 
 ## TODO:
 
   - 2(.5)D Map Texture Gen
   - 3rd person camera
   - controllable unit
-  - ??
+  - collision
+  - ?
 
 ## Libs
 
@@ -16,6 +17,8 @@
   - **cJSON**
     + []
   - **sds**
+    + []
+  - **mlib**
     + []
   - **klib**
     + []
