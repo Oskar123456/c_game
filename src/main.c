@@ -11,9 +11,11 @@ License:            none
 #include "../include/c_log.h"
 #include "../include/util.h"
 #include "../include/world.h"
+#include "../include/glad.h"
 #include "../include/raylib/raylib.h"
 #include "../include/raylib/raymath.h"
 #include "../include/raylib/rcamera.h"
+
 
 static float CAMERA_MOVE_SPEED = 45.0f;
 
@@ -40,7 +42,7 @@ struct Unit {
 void UpdateCameraCustom(Camera *camera, int mode);
 
 static int screenWidth = 800;
-static int screenHeight = 450;
+static int screenHeight = 600;
 static Camera camera;
 static bool fullscreen;
 static bool paused;
@@ -129,6 +131,32 @@ void pollKeys()
 int main(int argc, char *argv[])
 {
 
+    dict_uint_t float_freq_map;
+    dict_uint_init(float_freq_map);
+
+    int n_exps = 4, n_mantissa = 4;
+    for (int i = 0; i < n_exps; ++i) {
+        printf("\n");
+        for (int j = 0; j < 1 << n_mantissa; j++) {
+            float val = (1 << i);
+            float val_mantissa = 1;
+            float exp = n_mantissa;
+            for (int k = 0; k < n_mantissa; ++k) {
+                val_mantissa += ((j >> k) & 1) * (1 / pow(2, exp--));
+            }
+            val *= val_mantissa;
+            printf("%f, ", val);
+            if (dict_uint_get(float_freq_map, (int) val) == NULL)
+                dict_uint_set_at(float_freq_map, (int) val, 0);
+            dict_uint_set_at(float_freq_map, (int) val,
+                    *dict_uint_get(float_freq_map, (int) val) + 1);
+        }
+        printf("\n");
+    }
+
+    dict_uint_out_str(stdout, float_freq_map);
+    printf("\n");
+
 
     int exit_code = EXIT_SUCCESS;
     /* initialization */
@@ -172,7 +200,14 @@ int main(int argc, char *argv[])
 
     for (int i = 0; i < 3; ++i) {
         for (int j = 0; j < 3; ++j) {
-            chunks[i * 3 + j] = worldGenChunk(j * CHUNK_SIZE, i * CHUNK_SIZE, 1, 55);
+            chunks[i * 3 + j] = worldGenChunk(
+                    (j % 3) * CHUNK_SIZE,
+                    (i * 3) * CHUNK_SIZE,
+                    1, 55);
+            printf("chunk at %d %d\n",
+                    (j % 3) * CHUNK_SIZE,
+                    (i * 3) * CHUNK_SIZE
+                    );
         }
     }
 
@@ -193,9 +228,6 @@ int main(int argc, char *argv[])
                 0,
                 scarfy_img.width / (float)6, scarfy_img.height});
         ImageFlipVertical(&scarfy_sprites[i]);
-        sds filename = sdscatprintf(sdsempty(), "sprite_%d", i);
-        ExportImage(scarfy_sprites[i], filename);
-        sdsfree(filename);
         scarfy_textures[i] = LoadTextureFromImage(scarfy_sprites[i]);
         scarfy_models[i] = LoadModelFromMesh(player_mesh);
         scarfy_models[i].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = scarfy_textures[i];
@@ -209,9 +241,6 @@ int main(int argc, char *argv[])
                 scarfy_img.width / (float)6, scarfy_img.height});
         ImageFlipVertical(&scarfy_sprites[i]);
         ImageFlipHorizontal(&scarfy_sprites[i]);
-        sds filename = sdscatprintf(sdsempty(), "sprite_%d", i);
-        ExportImage(scarfy_sprites[i], filename);
-        sdsfree(filename);
         scarfy_textures[i] = LoadTextureFromImage(scarfy_sprites[i]);
         scarfy_models[i] = LoadModelFromMesh(player_mesh);
         scarfy_models[i].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = scarfy_textures[i];
@@ -226,20 +255,9 @@ int main(int argc, char *argv[])
     };
     camera.target = player_unit.pos;
 
-    // Load gltf model
-    //Model model = LoadModel("resources/models/baby_ares.glb");
-    //Vector3 position = { 0.0f, 0.0f, 0.0f }; // Set model position
-
-    // Load gltf model animations
-    //int animsCount = 0;
-    //unsigned int animIndex = 0;
-    //unsigned int animCurrentFrame = 0;
-    //ModelAnimation *modelAnimations = LoadModelAnimations("resources/models/baby_ares.glb", &animsCount);
-
     /* game stuff ends */
 
-    camera.target = player_unit.pos;
-
+    Shader cube_shader = LoadShader("resources/shaders/basic.vs", "resources/shaders/basic.fs");
 
     u64 frame_number = 0;
     int anim_frame_time = 10;
@@ -314,6 +332,10 @@ int main(int argc, char *argv[])
             //        100.0f, 100.0f, GREEN);
 
             DrawFPS(10, 10);
+            sds player_info = sdscatprintf(sdsempty(), "Player pos: x:%.2fy:%.2fz:%.2f",
+                    player_unit.x, player_unit.y, player_unit.z);
+            DrawText(player_info, 4, 40, 8, BLACK);
+            sdsfree(player_info);
 
         EndDrawing();
         //----------------------------------------------------------------------------------
@@ -385,9 +407,9 @@ void UpdateCameraCustom(Camera *camera, int mode)
         }
 
         // Keyboard support
-        if (IsKeyDown(KEY_W)) CameraMoveForward(camera, cameraMoveSpeed, moveInWorldPlane);
+        if (IsKeyDown(KEY_W)) CameraMoveForward(camera, cameraMoveSpeed * 2, moveInWorldPlane);
         //if (IsKeyDown(KEY_A)) CameraMoveRight(camera, -cameraMoveSpeed, moveInWorldPlane);
-        if (IsKeyDown(KEY_S)) CameraMoveForward(camera, -cameraMoveSpeed, moveInWorldPlane);
+        if (IsKeyDown(KEY_S)) CameraMoveForward(camera, -cameraMoveSpeed * 2, moveInWorldPlane);
         //if (IsKeyDown(KEY_D)) CameraMoveRight(camera, cameraMoveSpeed, moveInWorldPlane);
 
         // Gamepad movement

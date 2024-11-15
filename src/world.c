@@ -16,6 +16,8 @@ static Texture2D _cube_textures[CUBE_TYPE_NUM];
 worldChunk* worldGenChunk(int x_off, int z_off, float scale, int seed)
 {
     worldChunk* chunk = malloc(sizeof(worldChunk));
+    chunk->x = x_off / CHUNK_SIZE;
+    chunk->z = z_off / CHUNK_SIZE;
     Image image = GenImagePerlinNoise(CHUNK_SIZE, CHUNK_SIZE,
             x_off * CHUNK_SIZE, x_off * CHUNK_SIZE, 1);
 
@@ -51,7 +53,7 @@ void worldRenderChunk(worldChunk *chunk)
 {
     for (int i = 0; i < CHUNK_SIZE; ++i) {
         for (int j = 0; j < CHUNK_SIZE; ++j) {
-            Vector3 pos = { chunk->x * CHUNK_SIZE + j, chunk->cubes[i][j].height, chunk->z * CHUNK_SIZE  + i};
+            Vector3 pos = { chunk->x * CHUNK_SIZE + j, chunk->cubes[i][j].height, chunk->z * CHUNK_SIZE + i};
             DrawCubeTexture(_cube_textures[chunk->cubes[i][j].type],
                     pos, 1, 1, 1, WHITE);
             //printf("%f %f %f\n", pos.x, pos.y, pos.z);
