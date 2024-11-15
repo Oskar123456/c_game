@@ -14,7 +14,7 @@ License:            none
 #include "../include/raylib/raymath.h"
 #include "../include/raylib/rcamera.h"
 
-#define CHUNK_SIZE 10
+#define CHUNK_SIZE 32
 #define WORLD_ELEVATION_LEVELS 10
 
 typedef struct worldCube worldCube;

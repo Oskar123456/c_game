@@ -242,7 +242,7 @@ Mesh worldGenMeshCube(float width, float height, float length)
         0.51f, 0.99f,
         0.51f, 0.01f,
         0.99f, 0.01f,
-        0.51f, 0.99f,
+        0.99f, 0.99f,
         /* right */
         0.99f, 0.99f,
         0.51f, 0.99f,
