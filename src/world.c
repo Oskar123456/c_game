@@ -44,18 +44,41 @@ static Texture2D _cube_textures[CUBE_TYPE_NUM];
 static Shader _cube_shader;
 static int lightsCount = 0;
 
-worldChunk* worldGenChunk(int x_off, int z_off, float scale, int seed)
+static float world_scale = 1;
+static int world_seed    = 1;
+
+static worldChunk** WORLD_CHUNKS;
+static u32          WORLD_CHUNKS_NUM;
+static u32          WORLD_CHUNKS_CAP;
+
+static worldChunkMap* chunk_map;
+
+sds worldGetInfo()
 {
+    sds inf = sdscatprintf(sdsempty(),
+            "worldinf: %ld chunks",
+            hmlen(chunk_map));
+    return inf;
+}
+
+void worldChunkAdd(worldChunk* chunk)
+{
+    c_log_info(LOG_TAG, "worldChunkAdd %d %d %p", chunk->x, chunk->z, chunk);
+    worldChunkCoord coords = {chunk->x, chunk->z};
+    hmput(chunk_map, coords, chunk);
+}
+
+worldChunk* worldGenChunk(int x_off, int z_off)
+{
+    c_log_info(LOG_TAG, "worldGenChunk: %d %d", x_off, z_off);
     worldChunk* chunk = malloc(sizeof(worldChunk));
-    chunk->x = x_off / CHUNK_SIZE;
-    chunk->z = z_off / CHUNK_SIZE;
-    Image image = GenImagePerlinNoise(CHUNK_SIZE, CHUNK_SIZE,
-            x_off * CHUNK_SIZE, x_off * CHUNK_SIZE, 1);
+    chunk->x = x_off;
+    chunk->z = z_off;
 
     for (int i = 0; i < CHUNK_SIZE; ++i) {
         for (int j = 0; j < CHUNK_SIZE; ++j) {
-            float nz = (float)(i + z_off)*(scale/(float)CHUNK_SIZE);
-            float nx = (float)(j + x_off)*(scale/(float)CHUNK_SIZE);
+            float nz = (float)(i + z_off * CHUNK_SIZE)*(world_scale/(float)CHUNK_SIZE);
+            float nx = (float)(j + x_off * CHUNK_SIZE)*(world_scale/(float)CHUNK_SIZE);
 
             // Calculate a better perlin noise using fbm (fractal brownian motion)
             // Typical values to start playing with:
@@ -72,7 +95,7 @@ worldChunk* worldGenChunk(int x_off, int z_off, float scale, int seed)
             float np = (p + 1.0f)/2.0f;
 
             u8 type = np * CUBE_TYPE_NUM;
-            u8 h = np * WORLD_ELEVATION_LEVELS;
+            float h = (np * WORLD_ELEVATION_LEVELS) * 0.6f;
             chunk->cubes[i][j] = (worldCube) { .type = type, .height = h };
         }
     }
@@ -80,13 +103,52 @@ worldChunk* worldGenChunk(int x_off, int z_off, float scale, int seed)
     return chunk;
 }
 
+void worldMapToCubeCoords(Vector3 pos, int* x, int* z)
+{
+    *x = (int)floor(pos.x);
+    *z = (int)floor(pos.z);
+}
+
+void worldMapToChunkCoords(Vector3 pos, int* x, int* z)
+{
+    *x = (int)floor(pos.x) / CHUNK_SIZE - ((pos.x < 0) ? 1 : 0);
+    *z = (int)floor(pos.z) / CHUNK_SIZE - ((pos.z < 0) ? 1 : 0);
+}
+
+worldChunkCoord worldFindMe(Vector3 pos)
+{
+    worldChunk* chunk = NULL;
+    worldChunkCoord coords;
+    worldMapToChunkCoords(pos, &coords.x, &coords.z);
+    return coords;
+}
+
+void worldRender(Vector3 player_pos)
+{
+    worldChunkCoord coords;
+    worldMapToChunkCoords(player_pos, &coords.x, &coords.z);
+    for (int i = -1; i < 2; ++i) {
+        for (int j = -1; j < 2; ++j) {
+            worldChunkCoord coords_adj = {coords.x + j, coords.z + i};
+            if (hmget(chunk_map, coords_adj) == NULL) {
+                worldChunkAdd(worldGenChunk(coords_adj.x, coords_adj.z));
+            }
+            //c_log_info(LOG_TAG, "before crash");
+            worldRenderChunk(hmget(chunk_map, coords_adj));
+            //c_log_info(LOG_TAG, "after crash");
+        }
+    }
+}
+
 void worldRenderChunk(worldChunk *chunk)
 {
+    if (chunk == NULL)
+        c_log_error(LOG_TAG, "worldRenderChunk NULL pointer");
     for (int i = 0; i < CHUNK_SIZE; ++i) {
         for (int j = 0; j < CHUNK_SIZE; ++j) {
             worldCube* cube = &chunk->cubes[i][j];
-            Vector3 pos = { chunk->x * CHUNK_SIZE + j, chunk->cubes[i][j].height * 0.6f, chunk->z * CHUNK_SIZE + i};
-            DrawModel(_cube_models[cube->type], pos, 1, WHITE);
+            Vector3 pos = { chunk->x * CHUNK_SIZE + j, chunk->cubes[i][j].height, chunk->z * CHUNK_SIZE + i};
+            DrawModel(_cube_models[0], pos, 1, WHITE);
         }
     }
 }
@@ -156,6 +218,19 @@ Light CreateLight(int type, Vector3 position, Vector3 target, Color color, Shade
     }
 
     return light;
+}
+
+worldChunk* worldFindChunk(Vector3 pos)
+{
+    int x = (int)floor(pos.x) / CHUNK_SIZE - ((pos.x < 0) ? 1 : 0);
+    int z = (int)floor(pos.z) / CHUNK_SIZE - ((pos.z < 0) ? 1 : 0);
+    //c_log_info(LOG_TAG, "%f %f -> %d %d", pos.x, pos.z, x, z);
+    for (int i = 0; i < WORLD_CHUNKS_NUM; ++i) {
+        if (WORLD_CHUNKS[i]->x == x && WORLD_CHUNKS[i]->z == z)
+            return WORLD_CHUNKS[i];
+    }
+    worldChunkAdd(worldGenChunk(x, z));
+    return worldFindChunk(pos);
 }
 
 // Send light properties to shader
@@ -318,7 +393,87 @@ Mesh worldGenMeshCube(float width, float height, float length)
     return mesh;
 }
 
+worldCube worldGetCube(Vector3 pos)
+{
+    worldChunkCoord coords_chunk;
+    worldMapToChunkCoords(pos, &coords_chunk.x, &coords_chunk.z);
 
+    if (hmget(chunk_map, coords_chunk) == NULL) {
+        worldChunkAdd(worldGenChunk(coords_chunk.x, coords_chunk.z));
+    }
+
+    worldChunk* chunk = hmget(chunk_map, coords_chunk);
+
+    worldChunkCoord coords_cube;
+    worldMapToCubeCoords(pos, &coords_cube.x, &coords_cube.z);
+
+    bool sign_x = coords_cube.x < 0;
+    bool sign_z = coords_cube.z < 0;
+
+    if (sign_x)
+        coords_cube.x = CHUNK_SIZE - abs(coords_cube.x);
+    else
+        coords_cube.x = coords_cube.x % CHUNK_SIZE;
+    if (sign_z)
+        coords_cube.z = CHUNK_SIZE - abs(coords_cube.z);
+    else
+        coords_cube.z = coords_cube.z % CHUNK_SIZE;
+
+    return chunk->cubes[coords_cube.z][coords_cube.x];
+}
+
+bool worldCollisionTestBox(BoundingBox box)
+{
+    bool retval = false;
+
+    worldChunkCoord coords_chunk;
+    worldMapToChunkCoords(box.min, &coords_chunk.x, &coords_chunk.z);
+    worldChunk* chunk = hmget(chunk_map, coords_chunk);
+
+    worldCube cube;
+    worldChunkCoord coords_cube;
+    worldMapToCubeCoords(box.min, &coords_cube.x, &coords_cube.z);
+    for (int i = -1; i < 2; ++i) {
+        for (int j = -1; j < 2; ++j) {
+            worldCube cube = worldGetCube(Vector3Add(box.min, (Vector3) { j, 0, i }));
+            BoundingBox cube_box = {
+                { coords_cube.x + j, cube.height, coords_cube.z + i },
+                { coords_cube.x + j + 1, cube.height + 1, coords_cube.z + i + 1 }
+            };
+            if (CheckCollisionBoxes(box, cube_box))
+                retval = true;
+            c_log_info(LOG_TAG, "testing col: %f %f %f, against %f %f %f",
+                    box.min.x, box.min.y, box.min.z,
+                    cube_box.min.x, cube_box.min.y, cube_box.min.z);
+        }
+    }
+
+    if (retval)
+        c_log_info(LOG_TAG, "COLLISION: %f %f %f, against %d %f %d",
+               box.min.x, box.min.y, box.min.z, coords_cube.x, cube.height, coords_cube.z);
+    return retval;
+}
+
+void worldDrawClosestCubes(BoundingBox box)
+{
+    worldChunkCoord coords_chunk;
+    worldMapToChunkCoords(box.min, &coords_chunk.x, &coords_chunk.z);
+    worldChunk* chunk = hmget(chunk_map, coords_chunk);
+
+    worldCube cube;
+    worldChunkCoord coords_cube;
+    worldMapToCubeCoords(box.min, &coords_cube.x, &coords_cube.z);
+    for (int i = -1; i < 2; ++i) {
+        for (int j = -1; j < 2; ++j) {
+            worldCube cube = worldGetCube(Vector3Add(box.min, (Vector3) { j, 0, i }));
+            BoundingBox cube_box = {
+                { coords_cube.x + j + 0.08, cube.height + 0.08, coords_cube.z + i - 0.08},
+                { coords_cube.x + j + 1, cube.height + 1, coords_cube.z + i + 1 }
+            };
+            DrawCubeWires(cube_box.min, 1.08, 1.08, 1.08, WHITE);
+        }
+    }
+}
 
 
 

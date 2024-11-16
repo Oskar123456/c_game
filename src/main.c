@@ -16,6 +16,9 @@ License:            none
 #include "../include/raylib/raymath.h"
 #include "../include/raylib/rcamera.h"
 
+#define STB_DS_IMPLEMENTATION
+#include "../include/stb/stb_ds.h"
+
 
 static float CAMERA_MOVE_SPEED = 45.0f;
 
@@ -28,6 +31,8 @@ float CAMERA_OFF_X = 50.0f;
 float CAMERA_OFF_Y = 50.0f;
 float CAMERA_OFF_Z = -50.0f;
 
+typedef enum { DIR_DOWN_X, DIR_UP_X,  DIR_DOWN_Z, DIR_UP_Z, DIR_UP_Y, DIR_DOWN_Y } DIRECTION;
+
 struct Pixel { u8 r, g, b, a; };
 struct Unit {
     union {
@@ -36,12 +41,13 @@ struct Unit {
     };
 
     Model *models;
-    int    models_n, model_current;
-    int    direction, moving;
-    float movement_speed;
-    float movement_speed_sprint;
+    int   models_n, model_current;
+    int   direction, moving, in_air;
+    int   direction_when_jump_x, direction_when_jump_z;
     bool  is_sprinting;
     float direction_angle;
+    float fall_speed, movement_speed, movement_speed_sprint, movement_speed_actual;
+    Vector3 dir_vert, dir_hori, dir_up, dir_vec;
 };
 
 void UpdateCameraCustom(Camera *camera, int mode);
@@ -53,46 +59,73 @@ static bool fullscreen;
 static bool paused;
 struct Unit player_unit;
 
-void unitMove(struct Unit* unit, int x, int y, int z)
+void adjustCamera()
 {
-    Vector3 cross = Vector3CrossProduct(Vector3Subtract(camera.position, player_unit.pos), camera.up);
-    Vector3 cross_cross = Vector3CrossProduct(cross, camera.up);
-    cross = Vector3Normalize(cross);
-    cross_cross = Vector3Normalize(cross_cross);
-    //cross.x *= x;
-    //cross.y *= y;
-    //cross.z *= z;
+    camera.position = (Vector3){ CAMERA_OFF_X + player_unit.x,
+                     CAMERA_OFF_Y + player_unit.y,
+                     CAMERA_OFF_Z + player_unit.z };
+    camera.target = player_unit.pos;
+}
 
-    if (unit->is_sprinting) {
-        cross = Vector3Scale(cross, unit->movement_speed_sprint);
-        cross_cross = Vector3Scale(cross_cross, unit->movement_speed_sprint);
-    }
-    else {
-        cross = Vector3Scale(cross, unit->movement_speed);
-        cross_cross = Vector3Scale(cross_cross, unit->movement_speed);
-    }
+BoundingBox getBB(Vector3 pos)
+{
+    return (BoundingBox) { pos, (Vector3) {pos.x + 1, pos.y + 1, pos.z + 1} };
+}
 
-    if (x < 0) {
-        unit->pos = Vector3Add(unit->pos, cross);
-        camera.position = Vector3Add(camera.position, cross);
+void unitMove(struct Unit* unit, DIRECTION dir)
+{
+
+    if (dir == DIR_UP_X) {
+        unit->pos = Vector3Subtract(unit->pos,
+                Vector3Scale(unit->dir_hori, unit->movement_speed_actual));
+        if (worldCollisionTestBox(getBB(unit->pos))) {
+            unit->pos = Vector3Add(unit->pos,
+                    Vector3Scale(unit->dir_hori, unit->movement_speed_actual));
+        }
     }
-    if (x > 0) {
-        unit->pos = Vector3Subtract(unit->pos, cross);
-        camera.position = Vector3Subtract(camera.position, cross);
-    }
-    if (z > 0) {
-        unit->pos = Vector3Add(unit->pos, cross_cross);
-        camera.position = Vector3Add(camera.position, cross_cross);
-    }
-    if (z < 0) {
-        unit->pos = Vector3Subtract(unit->pos, cross_cross);
-        camera.position = Vector3Subtract(camera.position, cross_cross);
+    if (dir == DIR_DOWN_X) {
+        unit->pos = Vector3Add(unit->pos,
+                Vector3Scale(unit->dir_hori, unit->movement_speed_actual));
+        if (worldCollisionTestBox(getBB(unit->pos))) {
+            unit->pos = Vector3Subtract(unit->pos,
+                    Vector3Scale(unit->dir_hori, unit->movement_speed_actual));
+        }
     }
 
-    //camera.position.x = unit->x + CAMERA_OFF_X;
-    //camera.position.y = unit->y + CAMERA_OFF_Y;
-    //camera.position.z = unit->z + CAMERA_OFF_Z;
-    camera.target = unit->pos;
+    if (dir == DIR_DOWN_Y || dir == DIR_UP_Y) {
+        if (unit->in_air)
+            unit->fall_speed = min(unit->fall_speed + 0.06, 1.5);
+        unit->pos.y -= unit->dir_up.y * unit->fall_speed;
+        if (worldCollisionTestBox(getBB(unit->pos))) {
+            unit->pos.y += unit->dir_up.y * unit->fall_speed;
+            unit->in_air = false;
+            unit->direction_when_jump_x = -1;
+            unit->direction_when_jump_z = -1;
+        }
+        else {
+            unitMove(unit, unit->direction_when_jump_x);
+            unitMove(unit, unit->direction_when_jump_z);
+        }
+    }
+
+    if (dir == DIR_UP_Z) {
+        unit->pos = Vector3Add(unit->pos,
+                Vector3Scale(unit->dir_vert, unit->movement_speed_actual));
+        if (worldCollisionTestBox(getBB(unit->pos))) {
+        //unit->pos = Vector3Subtract(unit->pos,
+        //        Vector3Scale(unit->dir_vert, unit->movement_speed_actual));
+        }
+    }
+    if (dir == DIR_DOWN_Z) {
+        unit->pos = Vector3Subtract(unit->pos,
+                Vector3Scale(unit->dir_vert, unit->movement_speed_actual));
+        if (worldCollisionTestBox(getBB(unit->pos))) {
+        unit->pos = Vector3Add(unit->pos,
+                Vector3Scale(unit->dir_vert, unit->movement_speed_actual));
+        }
+    }
+
+    adjustCamera();
 }
 
 void pollWindowEvents()
@@ -120,66 +153,57 @@ void pollKeys()
     }
 
     if (IsKeyDown(KEY_LEFT_SHIFT))
-        player_unit.is_sprinting = true;
+        player_unit.movement_speed_actual = player_unit.movement_speed_sprint;
     else
-        player_unit.is_sprinting = false;
+        player_unit.movement_speed_actual = player_unit.movement_speed;
 
     if (IsKeyDown(KEY_UP) || IsKeyDown(KEY_DOWN) || IsKeyDown(KEY_LEFT) || IsKeyDown(KEY_RIGHT))
         player_unit.moving = 1;
     else
         player_unit.moving = 0;
 
-    if (IsKeyDown(KEY_UP)) {
-        player_unit.direction_angle = 0;
-            unitMove(&player_unit, 0, 0, 1);
+    if (!player_unit.in_air) {
+        if (IsKeyDown(KEY_UP)) {
+            player_unit.direction_angle = 0;
+            player_unit.direction = DIR_UP_Z;
+            unitMove(&player_unit, DIR_UP_Z);
+        }
+        if (IsKeyDown(KEY_DOWN)) {
+            player_unit.direction_angle = 180;
+            player_unit.direction = DIR_DOWN_Z;
+            unitMove(&player_unit, DIR_DOWN_Z);
+        }
+        if (IsKeyDown(KEY_LEFT)) {
+            player_unit.direction_angle = 90;
+            player_unit.direction = DIR_DOWN_X;
+            unitMove(&player_unit, DIR_DOWN_X);
+        }
+        if (IsKeyDown(KEY_RIGHT)) {
+            player_unit.direction_angle = 270;
+            player_unit.direction = DIR_UP_X;
+            unitMove(&player_unit, DIR_UP_X);
+        }
     }
-    if (IsKeyDown(KEY_DOWN)) {
-        player_unit.direction_angle = 180;
-            unitMove(&player_unit, 0, 0, -1);
-    }
-    if (IsKeyDown(KEY_LEFT)) {
-        player_unit.direction_angle = 90;
-        player_unit.direction = 0;
-            unitMove(&player_unit, -1, 0, 0);
-    }
-    if (IsKeyDown(KEY_RIGHT)) {
-        player_unit.direction_angle = 270;
-        player_unit.direction = 1;
-            unitMove(&player_unit, 1, 0, 0);
+
+    if (IsKeyPressed(KEY_SPACE) && !player_unit.in_air) {
+        player_unit.in_air = true;
+        player_unit.fall_speed = -0.5;
+        if (IsKeyDown(KEY_DOWN))
+            player_unit.direction_when_jump_z = DIR_DOWN_Z;
+        if (IsKeyDown(KEY_UP))
+            player_unit.direction_when_jump_z = DIR_UP_Z;
+        if (IsKeyDown(KEY_RIGHT))
+            player_unit.direction_when_jump_x = DIR_UP_X;
+        if (IsKeyDown(KEY_LEFT))
+            player_unit.direction_when_jump_x = DIR_DOWN_X;
+        c_log_info(LOG_TAG, "jump (%d %d)",
+                player_unit.direction_when_jump_x, player_unit.direction_when_jump_z);
     }
 }
 
 
 int main(int argc, char *argv[])
 {
-
-    dict_uint_t float_freq_map;
-    dict_uint_init(float_freq_map);
-
-    int n_exps = 4, n_mantissa = 4;
-    for (int i = 0; i < n_exps; ++i) {
-        printf("\n");
-        for (int j = 0; j < 1 << n_mantissa; j++) {
-            float val = (1 << i);
-            float val_mantissa = 1;
-            float exp = n_mantissa;
-            for (int k = 0; k < n_mantissa; ++k) {
-                val_mantissa += ((j >> k) & 1) * (1 / pow(2, exp--));
-            }
-            val *= val_mantissa;
-            printf("%f, ", val);
-            if (dict_uint_get(float_freq_map, (int) val) == NULL)
-                dict_uint_set_at(float_freq_map, (int) val, 0);
-            dict_uint_set_at(float_freq_map, (int) val,
-                    *dict_uint_get(float_freq_map, (int) val) + 1);
-        }
-        printf("\n");
-    }
-
-    dict_uint_out_str(stdout, float_freq_map);
-    printf("\n");
-
-
     int exit_code = EXIT_SUCCESS;
     /* initialization */
     srand(time(NULL));
@@ -193,48 +217,8 @@ int main(int argc, char *argv[])
     //DisableCursor();
     SetExitKey(0);
 
-    camera.position = (Vector3){ CAMERA_OFF_X, CAMERA_OFF_Y, CAMERA_OFF_Z };
-    camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };
-    camera.fovy = 10.0f;
-    camera.projection = CAMERA_PERSPECTIVE;
-
-//    int n_meshes = 100, mesh_size = 100;
-//    Model models[n_meshes];
-//    Vector3 model_positions[n_meshes];
-//
-//    for (int i = 0; i < n_meshes; ++i) {
-//        int x_coord = (i % 10) * mesh_size;
-//        int z_coord = (i / 10) * mesh_size;
-//        Image image = GenImagePerlinNoise(mesh_size, mesh_size, x_coord, z_coord, 1);
-//        Texture2D texture = LoadTextureFromImage(image);
-//
-//        Mesh mesh = GenMeshPlane(mesh_size, mesh_size, 1, 1);
-//        models[i] = LoadModelFromMesh(mesh);
-//
-//        models[i].materials[0].maps[MATERIAL_MAP_DIFFUSE].texture = texture;
-//        model_positions[i] = (Vector3) { x_coord, 0.0f, z_coord };
-//
-//        UnloadImage(image);
-//    }
-
-    worldInit();
-    worldChunk **chunks = malloc(sizeof(worldChunk*) * 9);
-
-    for (int i = 0; i < 1; ++i) {
-        for (int j = 0; j < 3; ++j) {
-            chunks[i * 3 + j] = worldGenChunk(
-                    (j % 3) * CHUNK_SIZE,
-                    (i * 3) * CHUNK_SIZE,
-                    1, 55);
-            printf("chunk at %d %d\n",
-                    (j % 3) * CHUNK_SIZE,
-                    (i * 3) * CHUNK_SIZE
-                    );
-        }
-    }
-
-
     /* game stuff begins */
+    worldInit();
 
     Mesh player_mesh = GenMeshPlane(1, 1, 1, 1);
 
@@ -281,10 +265,21 @@ int main(int argc, char *argv[])
         .models_n = 6,
         .movement_speed = 0.2,
         .movement_speed_sprint = 0.4,
-        .y = 0,
+        .y = 50,
+        .in_air = true,
     };
-    camera.target = player_unit.pos;
 
+    camera.target = player_unit.pos;
+    camera.position = (Vector3){ CAMERA_OFF_X, CAMERA_OFF_Y + player_unit.y, CAMERA_OFF_Z };
+    camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };
+    camera.fovy = 10.0f;
+    camera.projection = CAMERA_PERSPECTIVE;
+
+    player_unit.dir_hori = Vector3Normalize(Vector3CrossProduct(
+                Vector3Subtract(camera.position, player_unit.pos), camera.up));
+    player_unit.dir_vert = Vector3Normalize(Vector3CrossProduct(
+                player_unit.dir_hori, camera.up));
+    player_unit.dir_up = Vector3Normalize(camera.up);
 
     /* game stuff ends */
 
@@ -306,69 +301,65 @@ int main(int argc, char *argv[])
         // Update
         //----------------------------------------------------------------------------------
         UpdateCameraCustom(&camera, CAMERA_FREE);
-        //printf("%f %f %f\n", camera.target.x, camera.target.y, camera.target.z);
-        //printf("%f %f %f\n", camera.up.x, camera.up.x, camera.up.x);
         if (frame_number % anim_frame_time == 0)
             player_unit.model_current = (player_unit.model_current + 1) % player_unit.models_n;
-
-        // Update model animation
-        //ModelAnimation anim = modelAnimations[animIndex];
-        //animCurrentFrame = (animCurrentFrame + 1)%anim.frameCount;
-        //UpdateModelAnimation(model, anim, animCurrentFrame);
-        //----------------------------------------------------------------------------------
-
+        if (player_unit.in_air)
+            unitMove(&player_unit, DIR_DOWN_Y);
         // Draw
         //----------------------------------------------------------------------------------
         BeginDrawing();
 
-            ClearBackground(RAYWHITE);
+            ClearBackground(BLUE);
 
             BeginMode3D(camera);
 
-                //for (int i = 0; i < n_meshes; ++i) {
-                //    DrawModel(models[i], model_positions[i], 1.0f, (Color) { 0xC2, 0xB2, 0x80, 0xFF });
-                //}
-
-                for (int i = 0; i < 1; ++i) {
-                    worldRenderChunk(chunks[i]);
-                }
+                worldRender(player_unit.pos);
 
                 if (player_unit.moving)
                     DrawModelEx(
-                            player_unit.models[player_unit.model_current + player_unit.direction * player_unit.models_n],
+                            player_unit.models[player_unit.model_current + (player_unit.direction % 2) * player_unit.models_n],
                             player_unit.pos,
                             (Vector3) { 1, 1, 1 }, 0,
                             (Vector3) { 1, 1, 1 }, WHITE);
                 else
                     DrawModelEx(
-                            player_unit.models[player_unit.direction * player_unit.models_n + 2],
+                            player_unit.models[(player_unit.direction % 2) * player_unit.models_n + 2],
                             player_unit.pos,
                             (Vector3) { 1, 1, 1 }, 0,
                             (Vector3) { 1, 1, 1 },
                             WHITE);
 
-                //DrawModelEx(model, player_unit.pos, (Vector3) { 0, 1, 0 },
-                //        player_unit.direction_angle, (Vector3) { 0.2, 0.2, 0.2 }, BLUE);
+                DrawCubeWires(player_unit.pos, 1, 1, 1, YELLOW);
+                worldDrawClosestCubes(getBB(player_unit.pos));
 
                 DrawGrid(20, 1.0f);
 
             EndMode3D();
 
-            //DrawTextureEx(texture,
-            //        (Vector2) { screenWidth - 120, 20 },
-            //        0, 100.0f / texture.width, WHITE);  // Draw a Texture2D with extended parameters
-            //DrawRectangleLines(screenWidth - 120, 20,
-            //        100.0f, 100.0f, GREEN);
-
             DrawFPS(10, 10);
-            sds player_info = sdscatprintf(sdsempty(), "Player pos: x:%.2fy:%.2fz:%.2f",
-                    player_unit.x, player_unit.y, player_unit.z);
+            int x, z, cubex, cubez;;
+            worldMapToChunkCoords(player_unit.pos, &x, &z);
+            worldMapToCubeCoords(player_unit.pos, &cubex, &cubez);
+            sds player_info = sdscatprintf(sdsempty(), "Player pos: x:%.2fy:%.2fz:%.2f (chunk %d %d, cube %d %d)",
+                    player_unit.x, player_unit.y, player_unit.z, x, z, cubex, cubez);
+            sds player_info_2 = sdscatprintf(sdsempty(), "falling: %d (dir: x%f y:%f z:%f)",
+                    player_unit.in_air,
+                    player_unit.dir_vec.x,
+                    player_unit.dir_vec.y,
+                    player_unit.dir_vec.z);
             sds cam_info = sdscatprintf(sdsempty(), "Camera pos: x:%.2fy:%.2fz:%.2f",
                     camera.position.x, camera.position.y, camera.position.z);
-            DrawText(player_info, 4, 40, 8, BLACK);
-            DrawText(cam_info, 4, 60, 8, BLACK);
+            sds world_info = worldGetInfo();
+            int fontsize = 16;
+            int font_y = 40;
+            DrawText(player_info, 4, font_y, fontsize, BLACK);
+            DrawText(player_info_2, 4, font_y + 1 * fontsize + 2, fontsize, BLACK);
+            DrawText(cam_info, 4, font_y + 2 * fontsize + 2, fontsize, BLACK);
+            DrawText(world_info, 4, font_y + 3 * fontsize + 2, fontsize, BLACK);
             sdsfree(player_info);
+            sdsfree(player_info_2);
             sdsfree(cam_info);
+            sdsfree(world_info);
 
         EndDrawing();
         //----------------------------------------------------------------------------------
