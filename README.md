@@ -2,10 +2,7 @@
 
 ## TODO:
 
-  - 2(.5)D Map Texture Gen
-  - 3rd person camera
-  - controllable unit
-  - collision
+  - get handle on world positions, mapping between model & view.
   - collision
   - ?
 
