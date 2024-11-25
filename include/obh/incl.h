@@ -33,9 +33,9 @@
 #include <unistd.h>
 #endif
 /* strings */
-#include "sds.h"
-#include "cJSON.h"
-#include "stb/stb_ds.h"
+#include "../sds/sds.h"
+#include "../cJSON/cJSON.h"
+#include "../stb/stb_ds.h"
 /* own */
 /* typedefs, macros, defs */
 typedef  uint8_t  u8;

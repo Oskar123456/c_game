@@ -3,7 +3,6 @@
 
 #include "incl.h"
 #include "c_log.h"
-#include "glad.h"
 
 void arr_i_print(const int *arr, const int len);
 void arr_i_print2d(const int *arr, const int width, const int height);
