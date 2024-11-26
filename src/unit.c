@@ -24,3 +24,19 @@ void unitTurnLeft(Unit* unit, float deg)
 {
     unit->dir = Vector3RotateByAxisAngle(unit->dir, (Vector3) {0, 1, 0}, deg);
 }
+
+void unitUpdate(Unit* unit)
+{
+    if (unit->falling) {
+        unit->speed_fall_acc += 0.01;
+        unit->speed_fall += unit->speed_fall_acc;
+        unit->pos = Vector3Add(unit->pos, Vector3Scale((Vector3) { 0, -1, 0 }, unit->speed_fall));
+    }
+}
+
+void unitStop(Unit* unit)
+{
+    unit->falling = false;
+    unit->speed_fall = 0;
+    unit->speed_fall_acc = 0;
+}

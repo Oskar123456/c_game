@@ -6,7 +6,8 @@
 
 void arr_i_print(const int *arr, const int len);
 void arr_i_print2d(const int *arr, const int width, const int height);
-void arr_f_print(double *arr, int len);
+void arr_d_print(double *arr, int len);
+void arr_f_print(float *arr, int len);
 sds sdsfread(sds append_to, const char* path);
 
 #endif

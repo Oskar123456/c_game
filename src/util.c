@@ -34,7 +34,23 @@ void arr_i_print2d(const int *arr, const int width, const int height)
     printf("]");
 }
 
-void arr_f_print(double *arr, int len)
+void arr_d_print(double *arr, int len)
+{
+    int max = 0;
+    for (int i = 0; i < len; ++i)
+        if (fabs(arr[i]) > max)
+            max = fabs(arr[i]);
+    int digits = (int)log10(max + 1) + 2;
+    printf("[");
+    for (int i = 0; i < len; ++i) {
+        printf("%*f", digits, arr[i]);
+        if (i < len - 1)
+            printf(",");
+    }
+    printf("]");
+}
+
+void arr_f_print(float *arr, int len)
 {
     int max = 0;
     for (int i = 0; i < len; ++i)

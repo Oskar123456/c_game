@@ -12,13 +12,14 @@ License:            none
 
 struct Unit {
     Vector3 pos, dir;
-    float speed, speed_sprint;
+    float speed, speed_sprint, speed_fall, speed_fall_acc;
     Model* model;
-    bool sprinting;
+    bool sprinting, falling;
 };
 
 typedef struct Unit Unit;
 
 void unitMove(Unit* unit, Camera* cam);
 void unitTurnLeft(Unit* unit, float deg);
-
+void unitUpdate(Unit* unit);
+void unitStop(Unit* unit);
