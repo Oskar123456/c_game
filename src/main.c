@@ -23,10 +23,13 @@ License:            none
 #define STB_DS_IMPLEMENTATION
 #include "../include/stb/stb_ds.h"
 
+#define DARK_GRASS (Color) { 0x22, 0x2B, 0x29, 0xFF }
+#define LIGHT_GRASS (Color) { 0x6C, 0xAD, 0x18, 0xFF }
+
 static int scr_w = 800, scr_h = 600;
 
-static Camera camera;
-static float CAMERA_MOVE_SPEED = 45.0f;
+static UnitCamera unit_cam;
+static Unit player_unit;
 
 #define CAMERA_ROTATION_SPEED                           0.03f
 #define CAMERA_PAN_SPEED                                0.2f
@@ -37,146 +40,167 @@ static float CAMERA_OFF_X = 50.0f;
 static float CAMERA_OFF_Y = 50.0f;
 static float CAMERA_OFF_Z = -50.0f;
 
-Unit player_unit = {
-    .speed = 0.04,
-    .speed_sprint = 0.12,
-    .pos = (Vector3) {0, 0.5, 0},
-    .dir = (Vector3) {1, 0, 1},
+enum CUBETYPE {
+    CUBETYPE_GRASS,
+    CUBETYPE_NUM,
 };
 
-static Vector3 unit_horizontal, unit_vertical;
+#define CHUNKSIZE 32
+#define HEIGHTLEVELS 40
+
+typedef struct iVec2 {
+    int x, y;
+} iVec2;
+
+struct Cube {
+    int x, y, z;
+    enum CUBETYPE type;
+};
+
+struct WorldChunk {
+    iVec2 coord;
+    struct Cube cubes[CHUNKSIZE][CHUNKSIZE];
+};
+
+struct WorldMap {
+    union {
+        iVec2 coord;
+        iVec2 key;
+    };
+    union {
+        struct WorldChunk chunk;
+        struct WorldChunk value;
+    };
+};
+
+static struct WorldMap *world_map;
+
+struct WorldChunk genWorldChunk(int x, int z)
+{
+    struct WorldChunk wc = { .coord = { .x = x, .y = z } };
+
+    Image perlin_img = GenImagePerlinNoise(CHUNKSIZE, CHUNKSIZE, x * CHUNKSIZE, z * CHUNKSIZE, 0.6);
+    for (int i = 0; i < CHUNKSIZE; ++i) {
+        for (int j = 0; j < CHUNKSIZE; ++j) {
+            Color* perlin_colors = perlin_img.data;
+            wc.cubes[i][j] = (struct Cube) {.x = j,
+                    .y = perlin_colors[(CHUNKSIZE - i - 1) * CHUNKSIZE + j].r / HEIGHTLEVELS,
+                    .z = CHUNKSIZE - i - 1 };
+        }
+    }
+
+    return wc;
+}
+
+iVec2 getChunkCoords(Vector3 position)
+{
+    int chunk_x = floor(floor(position.x) / CHUNKSIZE);
+    int chunk_z = floor(floor(position.z) / CHUNKSIZE);
+    return (iVec2) { chunk_x, chunk_z };
+}
+
+void genWorldAround(Vector3 position)
+{
+    iVec2 chunk_pos = getChunkCoords(position);
+    int chunk_x = chunk_pos.x;
+    int chunk_z = chunk_pos.y;
+
+    for (int i = -1; i < 2; ++i) {
+        for (int j = -1; j < 2; ++j) {
+            iVec2 chunk_pos_inner = { chunk_x + j, chunk_z + i };
+            if (hmgeti(world_map, chunk_pos_inner) >= 0)
+                continue;
+            struct WorldChunk wc = genWorldChunk(chunk_pos_inner.x, chunk_pos_inner.y);
+            hmput(world_map, chunk_pos_inner, wc);
+        }
+    }
+}
 
 void pollKeys()
 {
-    if (IsKeyDown(KEY_LEFT)) {
-        player_unit.dir.x += 1;
-        player_unit.dir.z += 1;
-    }
-    if (IsKeyDown(KEY_RIGHT)) {
-        player_unit.dir.x += -1;
-        player_unit.dir.z += -1;
-    }
-    if (IsKeyDown(KEY_UP)) {
-        player_unit.dir.x += -1;
-        player_unit.dir.z += 1;
-    }
-    if (IsKeyDown(KEY_DOWN)) {
-        player_unit.dir.x += 1;
-        player_unit.dir.z += -1;
-    }
-
-    if (IsKeyDown(KEY_LEFT_SHIFT))
-        player_unit.sprinting = true;
-
-    else
-        player_unit.sprinting = false;
-
-    if (IsKeyPressed(KEY_SPACE) && !player_unit.falling) {
-        player_unit.falling = true;
-        player_unit.speed_fall = -1;
-    }
-
-    /* camera */
-
-    if (IsKeyDown(KEY_S)) {
-        CAMERA_OFF_X += 0.4;
-        CAMERA_OFF_Y += 0.4;
-        CAMERA_OFF_Z -= 0.4;
-    }
-
-    if (IsKeyDown(KEY_W)) {
-        CAMERA_OFF_X -= 0.4;
-        CAMERA_OFF_Y -= 0.4;
-        CAMERA_OFF_Z += 0.4;
-    }
-
-    if (IsKeyDown(KEY_A)) {
-        CAMERA_OFF_X -= 0.4;
-        CAMERA_OFF_Y += 0.4;
-    }
-
-    if (IsKeyDown(KEY_D)) {
-        CAMERA_OFF_X += 0.4;
-        CAMERA_OFF_Y -= 0.4;
-    }
-
-    if (IsKeyPressed(KEY_R)) {
-        CAMERA_OFF_X = 50;
-        CAMERA_OFF_Y = 50;
-        CAMERA_OFF_Z = -50;
-    }
-
-    unitMove(&player_unit, &camera);
-
-    player_unit.dir.x = 0;
-    player_unit.dir.z = 0;
-
 }
 
 void pollWindowEvents()
 {
-
 }
 
-// Draw cube textured
-// NOTE: Cube position is the center position
+/**
+ * Tailored for minecraft grass texture
+ */
 void DrawCubeTexture(Texture2D texture, Vector3 position, float width, float height, float length, Color color)
 {
     float x = position.x;
     float y = position.y;
     float z = position.z;
 
-    // Set desired texture to be enabled while drawing following vertex data
+    float tex_w = texture.width;
+    float tex_h = texture.height;
+
     rlSetTexture(texture.id);
 
-    // Vertex data transformation can be defined with the commented lines,
-    // but in this example we calculate the transformed vertex data directly when calling rlVertex3f()
-    //rlPushMatrix();
-        // NOTE: Transformation is applied in inverse order (scale -> rotate -> translate)
-        //rlTranslatef(2.0f, 0.0f, 0.0f);
-        //rlRotatef(45, 0, 1, 0);
-        //rlScalef(2.0f, 2.0f, 2.0f);
-
-        rlBegin(RL_QUADS);
-            rlColor4ub(color.r, color.g, color.b, color.a);
-            // Front Face
-            rlNormal3f(0.0f, 0.0f, 1.0f);       // Normal Pointing Towards Viewer
-            rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);  // Bottom Left Of The Texture and Quad
-            rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);  // Bottom Right Of The Texture and Quad
-            rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);  // Top Right Of The Texture and Quad
-            rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);  // Top Left Of The Texture and Quad
-            // Back Face
-            rlNormal3f(0.0f, 0.0f, - 1.0f);     // Normal Pointing Away From Viewer
-            rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);  // Bottom Right Of The Texture and Quad
-            rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);  // Top Right Of The Texture and Quad
-            rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);  // Top Left Of The Texture and Quad
-            rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);  // Bottom Left Of The Texture and Quad
-            // Top Face
-            rlNormal3f(0.0f, 1.0f, 0.0f);       // Normal Pointing Up
-            rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);  // Top Left Of The Texture and Quad
-            rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);  // Bottom Left Of The Texture and Quad
-            rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);  // Bottom Right Of The Texture and Quad
-            rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);  // Top Right Of The Texture and Quad
-            // Bottom Face
-            rlNormal3f(0.0f, - 1.0f, 0.0f);     // Normal Pointing Down
-            rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);  // Top Right Of The Texture and Quad
-            rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);  // Top Left Of The Texture and Quad
-            rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);  // Bottom Left Of The Texture and Quad
-            rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);  // Bottom Right Of The Texture and Quad
-            // Right face
-            rlNormal3f(1.0f, 0.0f, 0.0f);       // Normal Pointing Right
-            rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z - length/2);  // Bottom Right Of The Texture and Quad
-            rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z - length/2);  // Top Right Of The Texture and Quad
-            rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x + width/2, y + height/2, z + length/2);  // Top Left Of The Texture and Quad
-            rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x + width/2, y - height/2, z + length/2);  // Bottom Left Of The Texture and Quad
-            // Left Face
-            rlNormal3f( - 1.0f, 0.0f, 0.0f);    // Normal Pointing Left
-            rlTexCoord2f(0.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z - length/2);  // Bottom Left Of The Texture and Quad
-            rlTexCoord2f(1.0f, 0.0f); rlVertex3f(x - width/2, y - height/2, z + length/2);  // Bottom Right Of The Texture and Quad
-            rlTexCoord2f(1.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z + length/2);  // Top Right Of The Texture and Quad
-            rlTexCoord2f(0.0f, 1.0f); rlVertex3f(x - width/2, y + height/2, z - length/2);  // Top Left Of The Texture and Quad
-        rlEnd();
-    //rlPopMatrix();
+    rlBegin(RL_QUADS);
+        rlColor4ub(color.r, color.g, color.b, color.a);
+        // Front Face
+        rlNormal3f(0.0f, 0.0f, 1.0f);       // Normal Pointing Towards Viewer
+        rlTexCoord2f(0, ((tex_h / 3) * 2.0f) / tex_h);
+        rlVertex3f(x - width/2, y - height/2, z + length/2);  // Bottom Left Of The Texture and Quad
+        rlTexCoord2f((tex_w / 4) / tex_w, ((tex_h / 3) * 2.0f) / tex_h);
+        rlVertex3f(x + width/2, y - height/2, z + length/2);  // Bottom Right Of The Texture and Quad
+        rlTexCoord2f((tex_w / 4) / tex_w, ((tex_h / 3) * 1.0f) / tex_h);
+        rlVertex3f(x + width/2, y + height/2, z + length/2);  // Top Right Of The Texture and Quad
+        rlTexCoord2f(0, ((tex_h / 3) * 1.0f) / tex_h);
+        rlVertex3f(x - width/2, y + height/2, z + length/2);  // Top Left Of The Texture and Quad
+        // Back Face
+        rlNormal3f(0.0f, 0.0f, - 1.0f);     // Normal Pointing Away From Viewer
+        rlTexCoord2f((tex_w / 4) / tex_w, ((tex_h / 3) * 2.0f) / tex_h);
+        rlVertex3f(x - width/2, y - height/2, z - length/2);  // Bottom Right Of The Texture and Quad
+        rlTexCoord2f((tex_w / 4) / tex_w, ((tex_h / 3) * 1.0f) / tex_h);
+        rlVertex3f(x - width/2, y + height/2, z - length/2);  // Top Right Of The Texture and Quad
+        rlTexCoord2f(0, ((tex_h / 3) * 1.0f) / tex_h);
+        rlVertex3f(x + width/2, y + height/2, z - length/2);  // Top Left Of The Texture and Quad
+        rlTexCoord2f(0, ((tex_h / 3) * 2.0f) / tex_h);
+        rlVertex3f(x + width/2, y - height/2, z - length/2);  // Bottom Left Of The Texture and Quad
+        // Top Face
+        rlNormal3f(0.0f, 1.0f, 0.0f);       // Normal Pointing Up
+        rlTexCoord2f((tex_w / 4) / tex_w + 0.02, 0.02);
+        rlVertex3f(x - width/2, y + height/2, z - length/2);  // Top Left Of The Texture and Quad
+        rlTexCoord2f((tex_w / 4) / tex_w + 0.02, ((tex_h / 3) * 1.0f ) / tex_h - 0.02);
+        rlVertex3f(x - width/2, y + height/2, z + length/2);  // Bottom Left Of The Texture and Quad
+        rlTexCoord2f((tex_w / 2) / tex_w - 0.02, ((tex_h / 3) * 1.0f) / tex_h - 0.02);
+        rlVertex3f(x + width/2, y + height/2, z + length/2);  // Bottom Right Of The Texture and Quad
+        rlTexCoord2f((tex_w / 2) / tex_w - 0.02, 0.02);
+        rlVertex3f(x + width/2, y + height/2, z - length/2);  // Top Right Of The Texture and Quad
+        // Bottom Face
+        rlNormal3f(0.0f, - 1.0f, 0.0f);     // Normal Pointing Down
+        rlTexCoord2f((tex_w / 4) / tex_w, ((tex_h / 3) * 1.0f) / tex_h);
+        rlVertex3f(x - width/2, y - height/2, z - length/2);  // Top Right Of The Texture and Quad
+        rlTexCoord2f(0, ((tex_h / 3) * 1.0f) / tex_h);
+        rlVertex3f(x + width/2, y - height/2, z - length/2);  // Top Left Of The Texture and Quad
+        rlTexCoord2f(0, ((tex_h / 3) * 2.0f) / tex_h);
+        rlVertex3f(x + width/2, y - height/2, z + length/2);  // Bottom Left Of The Texture and Quad
+        rlTexCoord2f((tex_w / 4) / tex_w, ((tex_h / 3) * 2.0f) / tex_h);
+        rlVertex3f(x - width/2, y - height/2, z + length/2);  // Bottom Right Of The Texture and Quad
+        // Right face
+        rlNormal3f(1.0f, 0.0f, 0.0f);       // Normal Pointing Right
+        rlTexCoord2f((tex_w / 4) / tex_w, ((tex_h / 3) * 2.0f) / tex_h);
+        rlVertex3f(x + width/2, y - height/2, z - length/2);  // Bottom Right Of The Texture and Quad
+        rlTexCoord2f((tex_w / 4) / tex_w, ((tex_h / 3) * 1.0f) / tex_h);
+        rlVertex3f(x + width/2, y + height/2, z - length/2);  // Top Right Of The Texture and Quad
+        rlTexCoord2f(0, ((tex_h / 3) * 1.0f) / tex_h);
+        rlVertex3f(x + width/2, y + height/2, z + length/2);  // Top Left Of The Texture and Quad
+        rlTexCoord2f(0, ((tex_h / 3) * 2.0f) / tex_h);
+        rlVertex3f(x + width/2, y - height/2, z + length/2);  // Bottom Left Of The Texture and Quad
+        // Left Face
+        rlNormal3f( - 1.0f, 0.0f, 0.0f);    // Normal Pointing Left
+        rlTexCoord2f(0, ((tex_h / 3) * 2.0f) / tex_h);
+        rlVertex3f(x - width/2, y - height/2, z - length/2);  // Bottom Left Of The Texture and Quad
+        rlTexCoord2f((tex_w / 4) / tex_w, ((tex_h / 3) * 2.0f) / tex_h);
+        rlVertex3f(x - width/2, y - height/2, z + length/2);  // Bottom Right Of The Texture and Quad
+        rlTexCoord2f((tex_w / 4) / tex_w, ((tex_h / 3) * 1.0f) / tex_h);
+        rlVertex3f(x - width/2, y + height/2, z + length/2);  // Top Right Of The Texture and Quad
+        rlTexCoord2f(0, ((tex_h / 3) * 1.0f) / tex_h);
+        rlVertex3f(x - width/2, y + height/2, z - length/2);  // Top Left Of The Texture and Quad
+    rlEnd();
 
     rlSetTexture(0);
 }
@@ -199,39 +223,89 @@ void DrawModelWithCollisionCheck(Model* to_draw, Vector3 to_draw_pos,
     if (collision)
         DrawModel(*to_draw, to_draw_pos, 1, RED);
     else
-        DrawModel(*to_draw, to_draw_pos, 1, WHITE);
+        DrawModel(*to_draw, to_draw_pos, 1, LIGHT_GRASS);
+}
+
+bool CollisionTestSimple(Unit* unit, BoundingBox* bbs, int bbs_len)
+{
+    static int o = 0;
+    for (int i = 0; i < bbs_len; ++i) {
+        bool collision = CheckCollisionBoxes(bbs[i], unitBoundingBox(unit));
+        if (!collision)
+            continue;
+
+        //printf("collisionSimple: unit.pos: ");
+        //arr_f_print((float*)&unit->position, 3);
+        //printf(" unit.dir: ");
+        //arr_f_print((float*)&unit->direction, 3);
+        //printf(" bb: ");
+        //arr_f_print((float*)&bbs[i].min, 3);
+        //printf(" -- ");
+        //arr_f_print((float*)&bbs[i].max, 3);
+        //printf("\n");
+
+        if (unit->falling) {
+            unit->falling = false;
+            unit->fall_velocity = 0;
+            unit->direction.y = 0;
+            //printf("(fall) %d\n", o++);
+        }
+
+        unit->position.y = bbs[i].max.y + 0.5;
+
+        return true;
+    }
+
+    return false;
 }
 
 bool CollisionTest(Unit* unit, BoundingBox* bbs, int bbs_len)
 {
     if (!unit->falling)
         return false;
-    BoundingBox unit_bb = GetBoundingBoxModelWithPos(unit->model, unit->pos);
+
+    Vector3 unit_dir = unitGetMovementVec(unit);
+    BoundingBox unit_bb = unitBoundingBox(unit);
+    //unit_bb.min = Vector3Add(unit_bb.min, unit_dir);
+    //unit_bb.max = Vector3Add(unit_bb.max, unit_dir);
+
+    Ray unit_ray = { .position = unit->position, .direction = unit->direction };
+
     for (int i = 0; i < bbs_len; ++i) {
-        if (CheckCollisionBoxes(unit_bb, bbs[i])) {
-            unitStop(unit);
-            unit->pos.y = bbs[i].max.y + 0.51;
-            printf("collision between BB (min: ");
-            arr_f_print((float*)&bbs[i].min, 3);
-            printf(" | max: ");
-            arr_f_print((float*)&bbs[i].max, 3);
-            printf(")\n and unit (pos: ");
-            arr_f_print((float*)&unit->pos, 3);
-            printf(")\n");
-            return true;
+        bool collision = CheckCollisionBoxes(bbs[i], unit_bb);
+        if (!collision)
+            continue;
+        RayCollision rc_data = GetRayCollisionBox(unit_ray, bbs[i]);
+        if (!rc_data.hit)
+            continue;
+
+        printf("collision: unit.pos: ");
+        arr_f_print((float*)&unit->position, 3);
+        printf(" unit.dir: ");
+        arr_f_print((float*)&unit->direction, 3);
+        printf(" bb: ");
+        arr_f_print((float*)&bbs[i].min, 3);
+        printf(" -- ");
+        arr_f_print((float*)&bbs[i].max, 3);
+        printf(" at point: ");
+        arr_f_print((float*)&rc_data.point, 3);
+        printf("\n");
+
+        if (rc_data.normal.y > 0) {
+            unit->falling = false;
+            unit->fall_velocity = 0;
+            //printf(" (fall)");
         }
+
+        printf("\n");
+
+        unit->direction = (Vector3) { 0 };
+        unit->position = rc_data.point;
+        //unit->position.y = bbs[i].max.y;
+
+        return true;
     }
     return false;
-}
-
-void UpdateCameraThirdPerson(Camera* camera, Unit* unit)
-{
-    camera->target = unit->pos;
-    camera->position = (Vector3) {
-        camera->target.x + CAMERA_OFF_X,
-        camera->target.y + CAMERA_OFF_Y,
-        camera->target.z + CAMERA_OFF_Z,
-    };
 }
 
 int main(int argc, char *argv[])
@@ -254,15 +328,19 @@ int main(int argc, char *argv[])
     SetExitKey(0);
 
     /* game stuff begins */
-    camera.target = (Vector3) { 0.0f, 0.0f, 0.0f };
-    camera.position = (Vector3) {
-        camera.target.x + CAMERA_OFF_X,
-        camera.target.y + CAMERA_OFF_Y,
-        camera.target.z + CAMERA_OFF_Z,
-    };
-    camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };
-    camera.fovy = 5.0f;
-    camera.projection = CAMERA_PERSPECTIVE;
+    player_unit.movement_speed = 0.14;
+    player_unit.sprint_factor = 4;
+    player_unit.position = (Vector3) {0, 20, 0};
+    player_unit.falling = true;
+
+    unit_cam.camera.up = (Vector3){ 0.0f, 1.0f, 0.0f };
+    unit_cam.camera.fovy = 5.0f;
+    unit_cam.camera.projection = CAMERA_PERSPECTIVE;
+    unit_cam.following = &player_unit;
+    unit_cam.speed = 0.60;
+    unit_cam.off_x = CAMERA_OFF_X;
+    unit_cam.off_y = CAMERA_OFF_Y;
+    unit_cam.off_z = CAMERA_OFF_Z;
 
     Mesh m = GenMeshCube(1, 1, 1);
     Model mo = LoadModelFromMesh(m);
@@ -283,13 +361,21 @@ int main(int argc, char *argv[])
         cube_bb[i] = GetBoundingBoxModelWithPos(&mo, cube_pos[i]);
     }
 
-    Vector3 base_plane_pos = { 0, 0, 0 };
-    Mesh base_plane = GenMeshPlane(100, 100, 1, 1);
+    Vector3 base_plane_pos = { 0, -50, 0};
+    Mesh base_plane = GenMeshCube(100, 100, 100);
+    Model base_plane_model = LoadModelFromMesh(base_plane);
     BoundingBox base_plane_bb = GetMeshBoundingBox(base_plane);
-    base_plane_bb.min.y = -1.5;
-    base_plane_bb.max.y = 0.01;
+    base_plane_bb.min = Vector3Add(base_plane_bb.min, base_plane_pos);
+    base_plane_bb.max = Vector3Add(base_plane_bb.max, base_plane_pos);
     printf("%f %f %f --> %f %f %f \n", base_plane_bb.min.x,base_plane_bb.min.y,base_plane_bb.min.z,
             base_plane_bb.max.x,base_plane_bb.max.y,base_plane_bb.max.z);
+
+    Texture2D tex_grass = LoadTexture("resources/images/minecraft_grass.png");
+    Texture2D tex_dirt = LoadTexture("resources/images/minecraft_dirt_pure.jpg");
+
+    iVec2 origin = { 0 };
+    struct WorldChunk wc = genWorldChunk(0, 0);
+    hmput(world_map, origin, wc);
 
     /* game stuff ends */
 
@@ -306,15 +392,39 @@ int main(int argc, char *argv[])
         //----------------------------------------------------------------------------------
         pollKeys();
         pollWindowEvents();
+
+        unitPollInputs(&player_unit);
+        unitCamPollInputs(&unit_cam);
         //----------------------------------------------------------------------------------
         // Update
         unitUpdate(&player_unit);
+        unitUpdateThirdPersonCamera(&unit_cam);
 
-        CollisionTest(&player_unit, cube_bb, n_cubes);
-        CollisionTest(&player_unit, &base_plane_bb, 1);
+        genWorldAround(player_unit.position);
 
-        UpdateCamera(&camera, CAMERA_FREE);
-        UpdateCameraThirdPerson(&camera, &player_unit);
+        iVec2 player_chunk_pos = getChunkCoords(player_unit.position);
+        struct WorldChunk player_chunk = hmget(world_map, player_chunk_pos);
+
+        bool player_world_collision = false;
+        for (int z = 0; z < CHUNKSIZE; ++z) {
+            for (int x = 0; x < CHUNKSIZE; ++x) {
+                Vector3 pos = {
+                    player_chunk.cubes[z][x].x + player_chunk_pos.x * CHUNKSIZE,
+                    player_chunk.cubes[z][x].y,
+                    player_chunk.cubes[z][x].z + player_chunk_pos.y * CHUNKSIZE,
+                };
+                BoundingBox bb = GetMeshBoundingBox(m);
+                bb.min = Vector3Add(bb.min, pos);
+                bb.max = Vector3Add(bb.max, pos);
+                bool coll = CollisionTestSimple(&player_unit, &bb, 1);
+                if (coll)
+                    player_world_collision = true;
+            }
+        }
+        if (!(player_world_collision || CollisionTestSimple(&player_unit, &base_plane_bb, 1)))
+            player_unit.falling = true;
+
+        unitUpdateThirdPersonCamera(&unit_cam);
         //----------------------------------------------------------------------------------
         // Draw
         //----------------------------------------------------------------------------------
@@ -322,27 +432,36 @@ int main(int argc, char *argv[])
 
             ClearBackground(BLUE);
 
-            BeginMode3D(camera);
+            BeginMode3D(unit_cam.camera);
 
-                DrawGridPos(100, 1, Vector3Zero());
-                DrawCubeTexture(scarfy, player_unit.pos, 1, 1, 1, WHITE);
-                DrawCubeWires(player_unit.pos, 1, 1, 1, GREEN);
-                for (int i = 0; i < n_cubes; ++i) {
-                    Color col;
-                    col = RED;
-
-                    DrawModelWithCollisionCheck(&mo, cube_pos[i], player_unit.model, player_unit.pos);
+                /* world render */
+                for (int i = 0; i < hmlen(world_map); ++i) {
+                    for (int z = 0; z < CHUNKSIZE; ++z) {
+                        for (int x = 0; x < CHUNKSIZE; ++x) {
+                            Vector3 pos = {
+                                world_map[i].chunk.cubes[z][x].x + world_map[i].coord.x * CHUNKSIZE,
+                                world_map[i].chunk.cubes[z][x].y,
+                                world_map[i].chunk.cubes[z][x].z + world_map[i].coord.y * CHUNKSIZE,
+                            };
+                            DrawCubeTexture(tex_grass, pos, 1, 1, 1, WHITE);
+                        }
+                    }
                 }
 
-                DrawAxes(GetBoundingBoxModelWithPos(player_unit.model, player_unit.pos).min, 2, font);
+                //DrawGridPos(100, 1, (Vector3) { 0, 0.5, 0 });
+                DrawModel(*player_unit.model, player_unit.position, 1, BLUE);
+                //DrawModel(base_plane_model, base_plane_pos, 1, DARK_GRASS);
+                DrawCubeWires(player_unit.position, 1, 1, 1, GREEN);
+                DrawAxes(GetBoundingBoxModelWithPos(player_unit.model, player_unit.position).min, 2, font);
 
             EndMode3D();
 
             sprintf(camera_info_str, "%.1f %.1f %.1f --> %.1f %.1f %.1f",
-                    camera.position.x, camera.position.y, camera.position.z,
-                    camera.target.x, camera.target.y, camera.target.z);
-            sprintf(player_info_str, "%.2f %.2f %.2f",
-                    player_unit.pos.x, player_unit.pos.y, player_unit.pos.z);
+                    unit_cam.camera.position.x, unit_cam.camera.position.y, unit_cam.camera.position.z,
+                    unit_cam.camera.target.x, unit_cam.camera.target.y, unit_cam.camera.target.z);
+            sprintf(player_info_str, "%.2f %.2f %.2f / dir: %.2f, %.2f, %.2f",
+                    player_unit.position.x, player_unit.position.y, player_unit.position.z,
+                    player_unit.direction.x, player_unit.direction.y, player_unit.direction.z);
 
             DrawTextEx(font, camera_info_str, (Vector2) { 10, 30 }, 18, 1, YELLOW);
             DrawTextEx(font, player_info_str, (Vector2) { 10, 50 }, 18, 1, YELLOW);
