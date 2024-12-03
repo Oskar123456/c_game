@@ -80,8 +80,8 @@ struct WorldChunk genWorldChunk(int x, int z)
     struct WorldChunk wc = { .coord = { .x = x, .y = z } };
 
     Image perlin_img = GenImagePerlinNoise(CHUNKSIZE, CHUNKSIZE, x * CHUNKSIZE, z * CHUNKSIZE, 0.6);
-    for (int i = 0; i < CHUNKSIZE; ++i) {
-        for (int j = 0; j < CHUNKSIZE; ++j) {
+    for (int i = 0; i < CHUNKSIZE; i += 1) {
+        for (int j = 0; j < CHUNKSIZE; j += 1) {
             Color* perlin_colors = perlin_img.data;
             wc.cubes[i][j] = (struct Cube) {.x = j,
                     .y = perlin_colors[(CHUNKSIZE - i - 1) * CHUNKSIZE + j].r / HEIGHTLEVELS,
@@ -234,21 +234,10 @@ bool CollisionTestSimple(Unit* unit, BoundingBox* bbs, int bbs_len)
         if (!collision)
             continue;
 
-        //printf("collisionSimple: unit.pos: ");
-        //arr_f_print((float*)&unit->position, 3);
-        //printf(" unit.dir: ");
-        //arr_f_print((float*)&unit->direction, 3);
-        //printf(" bb: ");
-        //arr_f_print((float*)&bbs[i].min, 3);
-        //printf(" -- ");
-        //arr_f_print((float*)&bbs[i].max, 3);
-        //printf("\n");
-
         if (unit->falling) {
             unit->falling = false;
             unit->fall_velocity = 0;
             unit->direction.y = 0;
-            //printf("(fall) %d\n", o++);
         }
 
         unit->position.y = bbs[i].max.y + 0.5;
@@ -266,8 +255,6 @@ bool CollisionTest(Unit* unit, BoundingBox* bbs, int bbs_len)
 
     Vector3 unit_dir = unitGetMovementVec(unit);
     BoundingBox unit_bb = unitBoundingBox(unit);
-    //unit_bb.min = Vector3Add(unit_bb.min, unit_dir);
-    //unit_bb.max = Vector3Add(unit_bb.max, unit_dir);
 
     Ray unit_ray = { .position = unit->position, .direction = unit->direction };
 
@@ -308,6 +295,39 @@ bool CollisionTest(Unit* unit, BoundingBox* bbs, int bbs_len)
     return false;
 }
 
+RenderTexture2D LoadShadowmapRenderTexture(int width, int height)
+{
+    RenderTexture2D target = { 0 };
+
+    target.id = rlLoadFramebuffer(); // Load an empty framebuffer
+    target.texture.width = width;
+    target.texture.height = height;
+
+    if (target.id > 0)
+    {
+        rlEnableFramebuffer(target.id);
+
+        // Create depth texture
+        // We don't need a color texture for the shadowmap
+        target.depth.id = rlLoadTextureDepth(width, height, false);
+        target.depth.width = width;
+        target.depth.height = height;
+        target.depth.format = 19;       //DEPTH_COMPONENT_24BIT?
+        target.depth.mipmaps = 1;
+
+        // Attach depth texture to FBO
+        rlFramebufferAttach(target.id, target.depth.id, RL_ATTACHMENT_DEPTH, RL_ATTACHMENT_TEXTURE2D, 0);
+
+        // Check if fbo is complete with attachments (valid)
+        if (rlFramebufferComplete(target.id)) TRACELOG(LOG_INFO, "FBO: [ID %i] Framebuffer object created successfully", target.id);
+
+        rlDisableFramebuffer();
+    }
+    else TRACELOG(LOG_WARNING, "FBO: Framebuffer object can not be created");
+
+    return target;
+}
+
 int main(int argc, char *argv[])
 {
     int exit_code = EXIT_SUCCESS;
@@ -321,7 +341,9 @@ int main(int argc, char *argv[])
 
     char camera_info_str[512] = { 0 };
     char player_info_str[512] = { 0 };
+    char sun_info_str[512] = { 0 };
 
+    SetConfigFlags(FLAG_MSAA_4X_HINT);
     InitWindow(scr_w, scr_h, "raylib [models] example - heightmap loading and drawing");
     SetWindowState(FLAG_WINDOW_RESIZABLE);
     //DisableCursor();
@@ -342,24 +364,9 @@ int main(int argc, char *argv[])
     unit_cam.off_y = CAMERA_OFF_Y;
     unit_cam.off_z = CAMERA_OFF_Z;
 
-    Mesh m = GenMeshCube(1, 1, 1);
-    Model mo = LoadModelFromMesh(m);
-    player_unit.model = &mo;
-
     Font font = LoadFont("resources/fonts/overpass-regular.otf");
 
     Texture2D scarfy = LoadTexture("resources/images/scarfy.png");
-
-    int n_cubes = 75;
-    Vector3 cube_pos[n_cubes];
-    for (int i = 0; i < n_cubes; ++i) {
-        cube_pos[i] = (Vector3) { rand() % 70, 0.5, rand() % 70 };
-    }
-
-    BoundingBox cube_bb[n_cubes];
-    for (int i = 0; i < n_cubes; ++i) {
-        cube_bb[i] = GetBoundingBoxModelWithPos(&mo, cube_pos[i]);
-    }
 
     Vector3 base_plane_pos = { 0, -50, 0};
     Mesh base_plane = GenMeshCube(100, 100, 100);
@@ -378,6 +385,49 @@ int main(int argc, char *argv[])
     hmput(world_map, origin, wc);
 
     /* game stuff ends */
+
+    Shader shadowShader = LoadShader("resources/shaders/basic_shadow.vs",
+                                     "resources/shaders/basic_shadow.fs");
+    shadowShader.locs[SHADER_LOC_VECTOR_VIEW] = GetShaderLocation(shadowShader, "viewPos");
+    Vector3 lightDir = Vector3Normalize((Vector3){ 0.35f, -1.0f, -0.35f });
+    Color lightColor = WHITE;
+    Vector4 lightColorNormalized = ColorNormalize(lightColor);
+    int lightDirLoc = GetShaderLocation(shadowShader, "lightDir");
+    int lightColLoc = GetShaderLocation(shadowShader, "lightColor");
+    SetShaderValue(shadowShader, lightDirLoc, &lightDir, SHADER_UNIFORM_VEC3);
+    SetShaderValue(shadowShader, lightColLoc, &lightColorNormalized, SHADER_UNIFORM_VEC4);
+    int ambientLoc = GetShaderLocation(shadowShader, "ambient");
+    float ambient[4] = {0.1f, 0.1f, 0.1f, 1.0f};
+    SetShaderValue(shadowShader, ambientLoc, ambient, SHADER_UNIFORM_VEC4);
+    int lightVPLoc = GetShaderLocation(shadowShader, "lightVP");
+    int shadowMapLoc = GetShaderLocation(shadowShader, "shadowMap");
+    int shadowMapResolution = 1024;
+    SetShaderValue(shadowShader, GetShaderLocation(shadowShader, "shadowMapResolution"), &shadowMapResolution, SHADER_UNIFORM_INT);
+
+    RenderTexture2D shadowMap = LoadShadowmapRenderTexture(shadowMapResolution, shadowMapResolution);
+    Camera3D lightCam = (Camera3D){ 0 };
+    lightCam.position = (Vector3) { -100, 200, -100 };
+    lightCam.target = Vector3Zero();
+    lightCam.projection = CAMERA_ORTHOGRAPHIC;
+    lightCam.up = (Vector3){ 0.0f, 1.0f, 0.0f };
+    lightCam.fovy = 90.0f;
+
+    Mesh m = GenMeshCube(1, 1, 1);
+    Model mo = LoadModelFromMesh(m);
+    mo.materials[0].shader = shadowShader;
+    player_unit.model = &mo;
+
+    int n_cubes = 75;
+    Vector3 cube_pos[n_cubes];
+    for (int i = 0; i < n_cubes; ++i) {
+        cube_pos[i] = (Vector3) { rand() % 70, 0.5, rand() % 70 };
+    }
+
+    BoundingBox cube_bb[n_cubes];
+    for (int i = 0; i < n_cubes; ++i) {
+        cube_bb[i] = GetBoundingBoxModelWithPos(&mo, cube_pos[i]);
+    }
+
 
     u64 frame_number = 0;
     int anim_frame_time = 10;
@@ -405,6 +455,10 @@ int main(int argc, char *argv[])
         iVec2 player_chunk_pos = getChunkCoords(player_unit.position);
         struct WorldChunk player_chunk = hmget(world_map, player_chunk_pos);
 
+
+        Vector3 cameraPos = unit_cam.camera.position;
+        SetShaderValue(shadowShader, shadowShader.locs[SHADER_LOC_VECTOR_VIEW], &cameraPos, SHADER_UNIFORM_VEC3);
+
         bool player_world_collision = false;
         for (int z = 0; z < CHUNKSIZE; ++z) {
             for (int x = 0; x < CHUNKSIZE; ++x) {
@@ -430,12 +484,17 @@ int main(int argc, char *argv[])
         //----------------------------------------------------------------------------------
         BeginDrawing();
 
-            ClearBackground(BLUE);
+            ClearBackground(WHITE);
 
-            BeginMode3D(unit_cam.camera);
-
+            Matrix lightView;
+            Matrix lightProj;
+            BeginTextureMode(shadowMap);
+            ClearBackground(WHITE);
+            BeginMode3D(lightCam);
+                lightView = rlGetMatrixModelview();
+                lightProj = rlGetMatrixProjection();
                 /* world render */
-                for (int i = 0; i < hmlen(world_map); ++i) {
+                for (int i = 0; i < 1; ++i) {
                     for (int z = 0; z < CHUNKSIZE; ++z) {
                         for (int x = 0; x < CHUNKSIZE; ++x) {
                             Vector3 pos = {
@@ -443,7 +502,40 @@ int main(int argc, char *argv[])
                                 world_map[i].chunk.cubes[z][x].y,
                                 world_map[i].chunk.cubes[z][x].z + world_map[i].coord.y * CHUNKSIZE,
                             };
-                            DrawCubeTexture(tex_grass, pos, 1, 1, 1, WHITE);
+                            DrawModel(mo, pos, 0.90, BROWN);
+                            //DrawCubeTexture(tex_grass, pos, 1, 1, 1, WHITE);
+                        }
+                    }
+                }
+                DrawModel(*player_unit.model, player_unit.position, 1, BLUE);
+            EndMode3D();
+            EndTextureMode();
+            Matrix lightViewProj = MatrixMultiply(lightView, lightProj);
+
+            ClearBackground(BLUE);
+
+            SetShaderValueMatrix(shadowShader, lightVPLoc, lightViewProj);
+
+            rlEnableShader(shadowShader.id);
+            int slot = 10;
+            rlActiveTextureSlot(slot);
+            rlEnableTexture(shadowMap.depth.id);
+            rlSetUniform(shadowMapLoc, &slot, SHADER_UNIFORM_INT, 1);
+
+            BeginMode3D(unit_cam.camera);
+
+                /* world render */
+                for (int i = 0; i < 1; ++i) {
+                    for (int z = CHUNKSIZE - 1; z >= 0; --z) {
+                        for (int x = 0; x < CHUNKSIZE; ++x) {
+                            Vector3 pos = {
+                                world_map[i].chunk.cubes[z][x].x + world_map[i].coord.x * CHUNKSIZE,
+                                world_map[i].chunk.cubes[z][x].y,
+                                world_map[i].chunk.cubes[z][x].z + world_map[i].coord.y * CHUNKSIZE,
+                            };
+                            DrawModel(mo, pos, 0.90, BROWN);
+                            //DrawCubeWires(pos, 1, 1, 1, WHITE);
+                            //DrawCubeTexture(tex_grass, pos, 1, 1, 1, WHITE);
                         }
                     }
                 }
@@ -456,15 +548,18 @@ int main(int argc, char *argv[])
 
             EndMode3D();
 
-            sprintf(camera_info_str, "%.1f %.1f %.1f --> %.1f %.1f %.1f",
+            sprintf(camera_info_str, "camera: %.1f %.1f %.1f --> %.1f %.1f %.1f",
                     unit_cam.camera.position.x, unit_cam.camera.position.y, unit_cam.camera.position.z,
                     unit_cam.camera.target.x, unit_cam.camera.target.y, unit_cam.camera.target.z);
-            sprintf(player_info_str, "%.2f %.2f %.2f / dir: %.2f, %.2f, %.2f",
+            sprintf(player_info_str, "player: %.2f %.2f %.2f / dir: %.2f, %.2f, %.2f",
                     player_unit.position.x, player_unit.position.y, player_unit.position.z,
                     player_unit.direction.x, player_unit.direction.y, player_unit.direction.z);
+            sprintf(sun_info_str, "sun: %.2f %.2f %.2f",
+                    lightCam.position.x, lightCam.position.y, lightCam.position.z);
 
             DrawTextEx(font, camera_info_str, (Vector2) { 10, 30 }, 18, 1, YELLOW);
             DrawTextEx(font, player_info_str, (Vector2) { 10, 50 }, 18, 1, YELLOW);
+            DrawTextEx(font, sun_info_str, (Vector2) { 10, 70 }, 18, 1, YELLOW);
 
             DrawFPS(10, 10);
 
