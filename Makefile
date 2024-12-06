@@ -21,7 +21,7 @@ OBJEXT      := o
 
 #Flags, Libraries and Includes
 CFLAGS      := -fopenmp -Wall -g
-LIB         := -lm -lpq -lcurl lib/libraylib.a
+LIB         := -lm -lpq -lcurl -lraylib
 INC         := -I$(INCDIR) -I$(LIBDIR)
 INCDEP      := -I$(INCDIR)
 
